@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Price Forecasting - Simple Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #DAA520;
+            text-align: center;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        button {
+            background-color: #DAA520;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #B8860B;
+        }
+        .result {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .links {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .links a {
+            color: #DAA520;
+            text-decoration: none;
+            margin: 0 15px;
+            padding: 10px 15px;
+            border: 1px solid #DAA520;
+            border-radius: 5px;
+        }
+        .links a:hover {
+            background-color: #DAA520;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥇 Gold Price Forecasting System</h1>
+        
+        <div id="status" class="status loading">
+            Checking API connection...
+        </div>
+
+        <div>
+            <button onclick="testHealth()">Test API Health</button>
+            <button onclick="getCurrentPrice()">Get Current Gold Price</button>
+            <button onclick="getSimpleForecast()">Get 7-Day Forecast</button>
+        </div>
+
+        <div id="result" class="result" style="display: none;">
+            <h3>Result:</h3>
+            <pre id="resultContent"></pre>
+        </div>
+
+        <div class="links">
+            <a href="http://localhost:8000/docs" target="_blank">📖 API Documentation</a>
+            <a href="http://localhost:8000/redoc" target="_blank">📚 ReDoc</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function testConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    document.getElementById('status').className = 'status success';
+                    document.getElementById('status').textContent = '✅ API is running and healthy!';
+                } else {
+                    throw new Error('API returned error status');
+                }
+            } catch (error) {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = '❌ API connection failed. Make sure the server is running on port 8000.';
+            }
+        }
+
+        async function testHealth() {
+            showResult('Testing API health...');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2));
+            } catch (error) {
+                showResult(`Error: ${error.message}`);
+            }
+        }
+
+        async function getCurrentPrice() {
+            showResult('Fetching current gold price...');
+            try {
+                const response = await fetch(`${API_BASE}/current-price`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2));
+            } catch (error) {
+                showResult(`Error: ${error.message}`);
+            }
+        }
+
+        async function getSimpleForecast() {
+            showResult('Generating 7-day forecast...');
+            try {
+                const response = await fetch(`${API_BASE}/simple-forecast?days=7`);
+                const data = await response.json();
+                showResult(JSON.stringify(data, null, 2));
+            } catch (error) {
+                showResult(`Error: ${error.message}`);
+            }
+        }
+
+        function showResult(content) {
+            document.getElementById('resultContent').textContent = content;
+            document.getElementById('result').style.display = 'block';
+        }
+
+        // Test connection on page load
+        window.onload = testConnection;
+    </script>
+</body>
+</html>

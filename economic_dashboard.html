@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Price Economic Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        :root {
+            --primary-gold: #DAA520;
+            --secondary-gold: #FFD700;
+            --dark-blue: #2C3E50;
+            --success-green: #28A745;
+            --danger-red: #DC3545;
+            --warning-orange: #FFC107;
+            --light-gray: #F8F9FA;
+            --medium-gray: #6C757D;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-gold), var(--secondary-gold));
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .nav-menu {
+            background: var(--dark-blue);
+            padding: 0;
+            overflow-x: auto;
+        }
+
+        .nav-tabs {
+            display: flex;
+            min-width: 800px;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: transparent;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            white-space: nowrap;
+        }
+
+        .nav-tab:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .nav-tab.active {
+            background: var(--primary-gold);
+            color: white;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .indicators-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .indicator-card {
+            background: var(--light-gray);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 5px solid var(--primary-gold);
+            transition: transform 0.3s ease;
+        }
+
+        .indicator-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .indicator-title {
+            font-weight: bold;
+            color: var(--dark-blue);
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .indicator-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .positive { color: var(--success-green); }
+        .negative { color: var(--danger-red); }
+        .neutral { color: var(--medium-gray); }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .forecast-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .forecast-table th,
+        .forecast-table td {
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        .forecast-table th {
+            background: var(--dark-blue);
+            color: white;
+            font-weight: bold;
+        }
+
+        .forecast-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .forecast-table tr:hover {
+            background: #e9ecef;
+        }
+
+        .control-panel {
+            background: var(--light-gray);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            background: linear-gradient(45deg, var(--primary-gold), var(--secondary-gold));
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+            font-size: 1em;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .button.secondary {
+            background: var(--medium-gray);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--medium-gray);
+            font-size: 1.1em;
+        }
+
+        .status-good { 
+            background: #d4edda; 
+            color: #155724; 
+            border-left: 5px solid var(--success-green);
+        }
+        
+        .status-warning { 
+            background: #fff3cd; 
+            color: #856404; 
+            border-left: 5px solid var(--warning-orange);
+        }
+        
+        .status-danger { 
+            background: #f8d7da; 
+            color: #721c24; 
+            border-left: 5px solid var(--danger-red);
+        }
+
+        .correlation-matrix {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .correlation-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .correlation-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .nav-tabs {
+                flex-direction: column;
+                min-width: auto;
+            }
+            
+            .indicators-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-overview {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>🏆 Gold Price Economic Dashboard</h1>
+            <p>Comprehensive analysis using real-time economic indicators</p>
+        </div>
+
+        <nav class="nav-menu">
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="showTab('overview')">📊 Overview</button>
+                <button class="nav-tab" onclick="showTab('indicators')">📈 Economic Indicators</button>
+                <button class="nav-tab" onclick="showTab('forecast')">🔮 Enhanced Forecast</button>
+                <button class="nav-tab" onclick="showTab('correlations')">🔗 Correlations</button>
+                <button class="nav-tab" onclick="showTab('charts')">📉 Interactive Charts</button>
+                <button class="nav-tab" onclick="showTab('analysis')">🧮 Technical Analysis</button>
+                <button class="nav-tab" onclick="showTab('ml')">🤖 ML Training</button>
+                <button class="nav-tab" onclick="showTab('api')">🌐 API Testing</button>
+            </div>
+        </nav>
+
+        <div class="content">
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <h2>📊 Market Overview</h2>
+                <div class="control-panel">
+                    <button class="button" onclick="loadOverviewData()">🔄 Refresh All Data</button>
+                    <button class="button secondary" onclick="exportData()">📥 Export Data</button>
+                </div>
+                
+                <div class="stats-overview">
+                    <div class="stat-card">
+                        <div class="stat-number" id="current-gold-price">$0.00</div>
+                        <div class="stat-label">Current Gold Price</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="gold-change">0.00%</div>
+                        <div class="stat-label">24h Change</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="market-stress">-</div>
+                        <div class="stat-label">Market Stress</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="trend-direction">-</div>
+                        <div class="stat-label">Trend Direction</div>
+                    </div>
+                </div>
+
+                <div class="indicators-grid" id="overview-indicators">
+                    <div class="loading">Loading market overview...</div>
+                </div>
+            </div>
+
+            <!-- Economic Indicators Tab -->
+            <div id="indicators" class="tab-content">
+                <h2>📈 Real-time Economic Indicators</h2>
+                <div class="control-panel">
+                    <button class="button" onclick="loadEconomicIndicators()">🔄 Refresh Indicators</button>
+                    <button class="button secondary" onclick="toggleAutoRefresh()">⏰ Auto Refresh: OFF</button>
+                </div>
+                
+                <div class="indicators-grid" id="economic-indicators">
+                    <div class="loading">Loading economic indicators...</div>
+                </div>
+            </div>
+
+            <!-- Enhanced Forecast Tab -->
+            <div id="forecast" class="tab-content">
+                <h2>🔮 Enhanced Economic Forecast</h2>
+                <div class="control-panel">
+                    <label>Forecast Period: 
+                        <select id="forecast-days">
+                            <option value="7">7 Days</option>
+                            <option value="14">14 Days</option>
+                            <option value="21">21 Days</option>
+                            <option value="30">30 Days</option>
+                        </select>
+                    </label>
+                    <button class="button" onclick="loadEnhancedForecast()">🔮 Generate Forecast</button>
+                    <button class="button secondary" onclick="compareForecastMethods()">⚖️ Compare Methods</button>
+                </div>
+                
+                <div id="forecast-content">
+                    <div class="loading">Click "Generate Forecast" to see enhanced predictions</div>
+                </div>
+            </div>
+
+            <!-- Correlations Tab -->
+            <div id="correlations" class="tab-content">
+                <h2>🔗 Economic Correlations Analysis</h2>
+                <div class="control-panel">
+                    <button class="button" onclick="loadCorrelationAnalysis()">🔄 Update Correlations</button>
+                    <button class="button secondary" onclick="exportCorrelations()">📊 Export Analysis</button>
+                </div>
+                
+                <div id="correlation-content">
+                    <div class="loading">Loading correlation analysis...</div>
+                </div>
+            </div>
+
+            <!-- Interactive Charts Tab -->
+            <div id="charts" class="tab-content">
+                <h2>📉 Interactive Charts</h2>
+                <div class="control-panel">
+                    <label>Chart Type: 
+                        <select id="chart-type">
+                            <option value="price">Gold Price Trend</option>
+                            <option value="correlation">Correlation Matrix</option>
+                            <option value="volatility">Volatility Analysis</option>
+                            <option value="economic">Economic Indicators</option>
+                        </select>
+                    </label>
+                    <label>Time Period: 
+                        <select id="chart-period">
+                            <option value="1M">1 Month</option>
+                            <option value="3M">3 Months</option>
+                            <option value="6M">6 Months</option>
+                            <option value="1Y">1 Year</option>
+                        </select>
+                    </label>
+                    <button class="button" onclick="generateChart()">📊 Generate Chart</button>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="main-chart" width="800" height="400"></canvas>
+                </div>
+            </div>
+
+            <!-- Technical Analysis Tab -->
+            <div id="analysis" class="tab-content">
+                <h2>🧮 Technical Analysis</h2>
+                <div class="control-panel">
+                    <button class="button" onclick="runTechnicalAnalysis()">🔍 Run Analysis</button>
+                    <button class="button secondary" onclick="backtestStrategy()">🔙 Backtest Strategy</button>
+                </div>
+                
+                <div id="analysis-content">
+                    <div class="loading">Click "Run Analysis" to see technical indicators</div>
+                </div>
+            </div>
+
+            <!-- ML Training Tab -->
+            <div id="ml" class="tab-content">
+                <h2>🤖 Machine Learning Training Center</h2>
+                <p>Automatic ML training system that learns from 2+ years of historical gold price data</p>
+                
+                <div class="control-panel">
+                    <button class="button primary" onclick="trainMLModels()">🚀 Start Training</button>
+                    <button class="button secondary" onclick="getTrainingStatus()">📊 Training Status</button>
+                    <button class="button secondary" onclick="getMLPredictions()">🔮 ML Predictions</button>
+                </div>
+                
+                <div id="ml-content">
+                    <div class="loading">Click buttons above to interact with ML training system</div>
+                </div>
+                
+                <div class="info-box">
+                    <h3>📚 ML System Features:</h3>
+                    <ul>
+                        <li><strong>Historical Data:</strong> 2+ years of gold price movements</li>
+                        <li><strong>Technical Indicators:</strong> 50+ features including RSI, MACD, Bollinger Bands</li>
+                        <li><strong>Multiple Timeframes:</strong> 1-day, 3-day, 7-day, 14-day predictions</li>
+                        <li><strong>Random Forest:</strong> Ensemble model with 100+ decision trees</li>
+                        <li><strong>Cross-Validation:</strong> Robust training with time-series splits</li>
+                        <li><strong>Performance Tracking:</strong> Automatic accuracy and error metrics</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- API Testing Tab -->
+            <div id="api" class="tab-content">
+                <h2>🌐 API Testing Center</h2>
+                <div class="control-panel">
+                    <button class="button" onclick="testAllEndpoints()">🧪 Test All Endpoints</button>
+                    <button class="button secondary" onclick="viewApiDocs()">📖 View API Docs</button>
+                </div>
+                
+                <div id="api-testing-content">
+                    <div class="loading">Click "Test All Endpoints" to verify API functionality</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let autoRefreshInterval = null;
+        let currentChart = null;
+
+        // Tab Management
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            // Load data for specific tabs
+            switch(tabName) {
+                case 'overview':
+                    loadOverviewData();
+                    break;
+                case 'indicators':
+                    loadEconomicIndicators();
+                    break;
+                case 'correlations':
+                    loadCorrelationAnalysis();
+                    break;
+            }
+        }
+
+        // Overview Functions
+        async function loadOverviewData() {
+            try {
+                const [indicators, forecast] = await Promise.all([
+                    fetch(`${API_BASE}/economic-indicators`).then(r => r.json()),
+                    fetch(`${API_BASE}/simple-forecast?days=7`).then(r => r.json())
+                ]);
+
+                if (indicators.status === 'success') {
+                    updateOverviewStats(indicators.data, forecast);
+                    displayOverviewIndicators(indicators.data);
+                }
+            } catch (error) {
+                console.error('Error loading overview:', error);
+                document.getElementById('overview-indicators').innerHTML = 
+                    '<div class="indicator-card status-danger">Error loading overview data</div>';
+            }
+        }
+
+        function updateOverviewStats(data, forecast) {
+            document.getElementById('current-gold-price').textContent = `$${data.gold_price.toFixed(2)}`;
+            
+            const changeElement = document.getElementById('gold-change');
+            changeElement.textContent = `${data.gold_change_pct >= 0 ? '+' : ''}${data.gold_change_pct.toFixed(2)}%`;
+            changeElement.className = data.gold_change_pct >= 0 ? 'positive' : 'negative';
+            
+            document.getElementById('market-stress').textContent = data.market_stress_level;
+            document.getElementById('trend-direction').textContent = forecast.trend_direction || 'Neutral';
+        }
+
+        function displayOverviewIndicators(data) {
+            const indicatorsHtml = `
+                <div class="indicator-card">
+                    <div class="indicator-title">🥇 Gold Price</div>
+                    <div class="indicator-value ${data.gold_change_pct >= 0 ? 'positive' : 'negative'}">
+                        $${data.gold_price.toFixed(2)}
+                    </div>
+                    <div>Change: ${data.gold_change_pct >= 0 ? '+' : ''}${data.gold_change_pct.toFixed(2)}%</div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">💵 US Dollar Index</div>
+                    <div class="indicator-value ${data.dxy_change_pct <= 0 ? 'positive' : 'negative'}">
+                        ${data.dxy_index.toFixed(2)}
+                    </div>
+                    <div>Change: ${data.dxy_change_pct >= 0 ? '+' : ''}${data.dxy_change_pct.toFixed(2)}%</div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📊 Market Stress (VIX)</div>
+                    <div class="indicator-value ${getVixClass(data.vix_level)}">
+                        ${data.vix_level.toFixed(2)}
+                    </div>
+                    <div>Level: ${data.market_stress_level}</div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📈 S&P 500</div>
+                    <div class="indicator-value neutral">
+                        ${data.sp500_level.toFixed(0)}
+                    </div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🛢️ Oil Prices</div>
+                    <div class="indicator-value neutral">
+                        $${data.oil_price.toFixed(2)}
+                    </div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">₿ Bitcoin</div>
+                    <div class="indicator-value neutral">
+                        $${data.bitcoin_price.toFixed(0)}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('overview-indicators').innerHTML = indicatorsHtml;
+        }
+
+        // Economic Indicators Functions
+        async function loadEconomicIndicators() {
+            try {
+                const response = await fetch(`${API_BASE}/economic-indicators`);
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    displayEconomicIndicators(result.data);
+                } else {
+                    throw new Error('Failed to load indicators');
+                }
+            } catch (error) {
+                document.getElementById('economic-indicators').innerHTML = 
+                    '<div class="indicator-card status-danger">Error loading economic indicators</div>';
+            }
+        }
+
+        function displayEconomicIndicators(data) {
+            const indicatorsHtml = `
+                <div class="indicator-card">
+                    <div class="indicator-title">🥇 Gold Price</div>
+                    <div class="indicator-value ${data.gold_change_pct >= 0 ? 'positive' : 'negative'}">
+                        $${data.gold_price.toFixed(2)}
+                    </div>
+                    <div>24h Change: ${data.gold_change_pct >= 0 ? '+' : ''}${data.gold_change_pct.toFixed(2)}%</div>
+                    <small>Primary asset being forecasted</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">💵 US Dollar Index (DXY)</div>
+                    <div class="indicator-value ${data.dxy_change_pct <= 0 ? 'positive' : 'negative'}">
+                        ${data.dxy_index.toFixed(2)}
+                    </div>
+                    <div>Change: ${data.dxy_change_pct >= 0 ? '+' : ''}${data.dxy_change_pct.toFixed(2)}%</div>
+                    <small>Inverse relationship with gold</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📊 Market Stress (VIX)</div>
+                    <div class="indicator-value ${getVixClass(data.vix_level)}">
+                        ${data.vix_level.toFixed(2)}
+                    </div>
+                    <div>Level: ${data.market_stress_level}</div>
+                    <small>High VIX typically supports gold demand</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📈 S&P 500</div>
+                    <div class="indicator-value neutral">
+                        ${data.sp500_level.toFixed(0)}
+                    </div>
+                    <small>Risk-on vs Risk-off sentiment indicator</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🏛️ Treasury Yield</div>
+                    <div class="indicator-value ${data.treasury_yield > 4 ? 'negative' : 'positive'}">
+                        ${data.treasury_yield.toFixed(2)}%
+                    </div>
+                    <small>Higher yields create pressure on gold</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🛢️ Oil Prices</div>
+                    <div class="indicator-value neutral">
+                        $${data.oil_price.toFixed(2)}
+                    </div>
+                    <small>Geopolitical stress and inflation indicator</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🥈 Silver</div>
+                    <div class="indicator-value neutral">
+                        $${data.silver_price.toFixed(2)}
+                    </div>
+                    <small>Precious metals correlation: ${(data.gold_price / data.silver_price).toFixed(1)}:1</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">₿ Bitcoin</div>
+                    <div class="indicator-value neutral">
+                        $${data.bitcoin_price.toFixed(0)}
+                    </div>
+                    <small>Digital gold and risk asset sentiment</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🏦 Treasury Bonds</div>
+                    <div class="indicator-value neutral">
+                        $${data.bonds_level.toFixed(2)}
+                    </div>
+                    <small>Safe haven alternative to gold</small>
+                </div>
+            `;
+            
+            document.getElementById('economic-indicators').innerHTML = indicatorsHtml;
+        }
+
+        // Enhanced Forecast Functions
+        async function loadEnhancedForecast() {
+            const days = document.getElementById('forecast-days').value;
+            document.getElementById('forecast-content').innerHTML = 
+                '<div class="loading">Generating enhanced forecast using economic fundamentals...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/enhanced-forecast?days=${days}`);
+                const forecast = await response.json();
+                
+                if (forecast.error) {
+                    throw new Error(forecast.error);
+                }
+                
+                displayEnhancedForecast(forecast);
+            } catch (error) {
+                document.getElementById('forecast-content').innerHTML = 
+                    `<div class="indicator-card status-danger">
+                        <strong>❌ Forecast Error:</strong> ${error.message}
+                    </div>`;
+            }
+        }
+
+        function displayEnhancedForecast(forecast) {
+            const economicFactors = forecast.economic_factors;
+            
+            const factorsHtml = `
+                <div class="indicator-card status-good">
+                    <h4>🔍 Economic Factors Analysis:</h4>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Trend Factor:</strong> ${(economicFactors.trend_factor * 100).toFixed(2)}%</li>
+                        <li><strong>Market Stress Impact:</strong> ${(economicFactors.stress_adjustment * 100).toFixed(2)}%</li>
+                        <li><strong>Dollar Strength Impact:</strong> ${(economicFactors.dollar_adjustment * 100).toFixed(2)}%</li>
+                        <li><strong>Market Sentiment:</strong> ${(economicFactors.sentiment_adjustment * 100).toFixed(2)}%</li>
+                    </ul>
+                </div>
+            `;
+            
+            const tableHtml = `
+                <table class="forecast-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Predicted Price</th>
+                            <th>Change from Today</th>
+                            <th>Confidence Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${forecast.forecast.map(day => `
+                            <tr>
+                                <td>${day.date}</td>
+                                <td class="${day.change_from_today >= 0 ? 'positive' : 'negative'}">
+                                    $${day.predicted_price}
+                                </td>
+                                <td class="${day.change_from_today >= 0 ? 'positive' : 'negative'}">
+                                    ${day.change_from_today >= 0 ? '+' : ''}${day.change_from_today}%
+                                </td>
+                                <td>${(day.confidence * 100).toFixed(0)}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            const modelInfo = `
+                <div class="indicator-card">
+                    <h4>📊 Model Information:</h4>
+                    <p><strong>Data Points Used:</strong> ${forecast.model_info.data_points}</p>
+                    <p><strong>Features Analyzed:</strong> ${forecast.model_info.features_used}</p>
+                    <p><strong>Forecast Horizon:</strong> ${forecast.model_info.forecast_horizon}</p>
+                    <p><strong>Last Updated:</strong> ${new Date(forecast.model_info.last_updated).toLocaleString()}</p>
+                </div>
+            `;
+            
+            document.getElementById('forecast-content').innerHTML = factorsHtml + tableHtml + modelInfo;
+        }
+
+        // Correlation Analysis Functions
+        async function loadCorrelationAnalysis() {
+            document.getElementById('correlation-content').innerHTML = 
+                '<div class="loading">Analyzing correlations between gold and economic indicators...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/correlation-analysis`);
+                const analysis = await response.json();
+                
+                if (analysis.error) {
+                    throw new Error(analysis.error);
+                }
+                
+                displayCorrelationAnalysis(analysis);
+            } catch (error) {
+                document.getElementById('correlation-content').innerHTML = 
+                    `<div class="indicator-card status-danger">
+                        <strong>❌ Correlation Error:</strong> ${error.message}
+                    </div>`;
+            }
+        }
+
+        function displayCorrelationAnalysis(analysis) {
+            const correlationsHtml = Object.entries(analysis.correlations).map(([indicator, data]) => `
+                <div class="correlation-item">
+                    <h4>${indicator}</h4>
+                    <div class="correlation-value ${getCorrelationClass(data.correlation)}">
+                        ${data.correlation}
+                    </div>
+                    <div><strong>${data.relationship}</strong> ${data.direction}</div>
+                </div>
+            `).join('');
+            
+            const analysisInfo = `
+                <div class="indicator-card">
+                    <h4>📈 Correlation Analysis Summary</h4>
+                    <p><strong>Analysis Period:</strong> ${analysis.analysis_period}</p>
+                    <p><strong>Generated:</strong> ${new Date(analysis.timestamp).toLocaleString()}</p>
+                    <p><strong>Interpretation:</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Values close to +1 indicate strong positive correlation</li>
+                        <li>Values close to -1 indicate strong negative correlation</li>
+                        <li>Values close to 0 indicate weak or no correlation</li>
+                    </ul>
+                </div>
+            `;
+            
+            document.getElementById('correlation-content').innerHTML = 
+                analysisInfo + '<div class="correlation-matrix">' + correlationsHtml + '</div>';
+        }
+
+        // Chart Generation Functions
+        function generateChart() {
+            const chartType = document.getElementById('chart-type').value;
+            const period = document.getElementById('chart-period').value;
+            
+            // This would integrate with Chart.js to create interactive charts
+            const ctx = document.getElementById('main-chart').getContext('2d');
+            
+            if (currentChart) {
+                currentChart.destroy();
+            }
+            
+            // Sample chart - in real implementation, this would fetch actual data
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Gold Price',
+                        data: [1800, 1850, 1820, 1900, 1950, 1980],
+                        borderColor: '#DAA520',
+                        backgroundColor: 'rgba(218, 165, 32, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart - ${period}`
+                        }
+                    }
+                }
+            });
+        }
+
+        // API Testing Functions
+        async function testAllEndpoints() {
+            const endpoints = [
+                { name: 'Health Check', url: '/health' },
+                { name: 'Current Price', url: '/current-price' },
+                { name: 'Simple Forecast', url: '/simple-forecast?days=7' },
+                { name: 'Enhanced Forecast', url: '/enhanced-forecast?days=7' },
+                { name: 'Economic Indicators', url: '/economic-indicators' },
+                { name: 'Correlation Analysis', url: '/correlation-analysis' }
+            ];
+            
+            let testResults = '<h3>🧪 API Endpoint Test Results</h3>';
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const start = Date.now();
+                    const response = await fetch(`${API_BASE}${endpoint.url}`);
+                    const duration = Date.now() - start;
+                    
+                    if (response.ok) {
+                        testResults += `
+                            <div class="indicator-card status-good">
+                                <strong>✅ ${endpoint.name}</strong><br>
+                                Status: ${response.status} | Response Time: ${duration}ms
+                            </div>
+                        `;
+                    } else {
+                        testResults += `
+                            <div class="indicator-card status-warning">
+                                <strong>⚠️ ${endpoint.name}</strong><br>
+                                Status: ${response.status} | Response Time: ${duration}ms
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    testResults += `
+                        <div class="indicator-card status-danger">
+                            <strong>❌ ${endpoint.name}</strong><br>
+                            Error: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+            
+            document.getElementById('api-testing-content').innerHTML = testResults;
+        }
+
+        // Utility Functions
+        function getVixClass(vix) {
+            if (vix > 30) return 'negative';
+            if (vix < 20) return 'positive';
+            return 'neutral';
+        }
+
+        function getCorrelationClass(corr) {
+            if (Math.abs(corr) > 0.7) return 'positive';
+            if (Math.abs(corr) > 0.3) return 'neutral';
+            return 'negative';
+        }
+
+        function toggleAutoRefresh() {
+            const button = event.target;
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                button.textContent = '⏰ Auto Refresh: OFF';
+            } else {
+                autoRefreshInterval = setInterval(loadEconomicIndicators, 30000); // 30 seconds
+                button.textContent = '⏰ Auto Refresh: ON';
+            }
+        }
+
+        function viewApiDocs() {
+            window.open(`${API_BASE}/docs`, '_blank');
+        }
+
+        function exportData() {
+            // Implementation for data export
+            alert('Data export functionality would be implemented here');
+        }
+
+        // ML Training functions
+        async function trainMLModels() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">🚀 Starting ML training on historical data...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/auto-train`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    content.innerHTML = `
+                        <div class="info-box success">
+                            <h3>✅ Training Completed Successfully!</h3>
+                            <p><strong>Timestamp:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                            <p><strong>Models Trained:</strong> ${data.model_paths ? Object.keys(data.model_paths).length : 'Multiple'}</p>
+                            <div class="forecast-table">
+                                <h4>📁 Model Files:</h4>
+                                ${data.model_paths ? Object.entries(data.model_paths).map(([days, path]) => 
+                                    `<div>${days}: ${path}</div>`
+                                ).join('') : 'Model paths not available'}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="info-box error">
+                            <h3>❌ Training Failed</h3>
+                            <p>${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Failed to connect to training API: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function getTrainingStatus() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">📊 Checking training status...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/training-status`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    content.innerHTML = `
+                        <div class="info-box info">
+                            <h3>📊 Training Status Report</h3>
+                            <p><strong>Timestamp:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                            <div class="forecast-table">
+                                <h4>🎯 Training Information:</h4>
+                                <pre>${JSON.stringify(data.training_info, null, 2)}</pre>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="info-box error">
+                            <h3>❌ Status Check Failed</h3>
+                            <p>${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Failed to get training status: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function getMLPredictions() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">🔮 Getting ML predictions...</div>';
+            
+            try {
+                // Get predictions for different timeframes
+                const timeframes = [1, 3, 7, 14];
+                const predictions = {};
+                
+                for (const days of timeframes) {
+                    const response = await fetch(`${API_BASE}/ml-predictions/${days}`);
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        predictions[days] = data.predictions;
+                    }
+                }
+                
+                content.innerHTML = `
+                    <div class="info-box info">
+                        <h3>🔮 ML Predictions</h3>
+                        <div class="correlation-matrix">
+                            ${timeframes.map(days => `
+                                <div class="correlation-item">
+                                    <h4>${days} Day${days > 1 ? 's' : ''}</h4>
+                                    <div class="correlation-value">
+                                        ${predictions[days] ? '$' + predictions[days].toFixed(2) : 'N/A'}
+                                    </div>
+                                    <div>Predicted Price</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <p><em>Predictions based on trained Random Forest models using 50+ technical indicators</em></p>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Prediction Error</h3>
+                        <p>Failed to get ML predictions: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadOverviewData();
+        });
+    </script>
+</body>
+</html>
