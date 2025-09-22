@@ -43,6 +43,23 @@ class EnhancedAutoMLTrainer:
         self.model_dir = Path("data/models")
         self.model_dir.mkdir(parents=True, exist_ok=True)
         
+        # Progress tracking attributes
+        self.training_progress = {
+            'status': 'idle',
+            'current_step': '',
+            'progress_percent': 0,
+            'steps_completed': 0,
+            'total_steps': 0,
+            'current_model': '',
+            'models_completed': 0,
+            'total_models': 0,
+            'estimated_time_remaining': 0,
+            'start_time': None,
+            'detailed_log': [],
+            'last_update': None
+        }
+        self.is_training = False
+        
         # Extended prediction horizons up to 1 year
         self.horizons = [1, 3, 5, 7, 14, 21, 30, 45, 60, 90, 120, 180, 270, 365]
         self.horizon_names = {
@@ -58,43 +75,200 @@ class EnhancedAutoMLTrainer:
             'long_term': ['random_forest', 'ridge', 'lasso', 'svr']  # 120d-365d
         }
         
+    def validate_data_quality(self, data, source_name="Unknown"):
+        """Comprehensive data quality validation"""
+        logger.info(f"🔍 Validating data quality for {source_name}...")
+        
+        issues = []
+        warnings = []
+        
+        # 1. Basic data checks
+        if data.empty:
+            issues.append("Dataset is empty")
+            return False, issues, warnings
+        
+        if len(data) < 100:
+            issues.append(f"Insufficient data: {len(data)} samples (minimum 100 required)")
+            return False, issues, warnings
+        
+        # 2. Price range validation
+        if 'Close' in data.columns:
+            avg_price = data['Close'].mean()
+            min_price = data['Close'].min()
+            max_price = data['Close'].max()
+            
+            if avg_price < 1000:
+                if avg_price < 500:
+                    issues.append(f"Average price too low: ${avg_price:.2f} (might be ETF data, not futures)")
+                else:
+                    warnings.append(f"Price seems low: ${avg_price:.2f} (might need scaling)")
+            
+            if max_price > 10000:
+                warnings.append(f"Unusually high price detected: ${max_price:.2f}")
+            
+            if min_price < 100:
+                warnings.append(f"Unusually low price detected: ${min_price:.2f}")
+        
+        # 3. Volume validation
+        if 'Volume' in data.columns:
+            avg_volume = data['Volume'].mean()
+            if avg_volume < 1000:
+                warnings.append(f"Low trading volume: {avg_volume:.0f} (might be illiquid)")
+            elif avg_volume > 1000000:
+                logger.info(f"✅ Good volume: {avg_volume:.0f}")
+        
+        # 4. Missing data analysis
+        total_cells = len(data) * len(data.columns)
+        missing_cells = data.isnull().sum().sum()
+        missing_percentage = (missing_cells / total_cells) * 100
+        
+        if missing_percentage > 10:
+            issues.append(f"Too much missing data: {missing_percentage:.1f}% (max 10% allowed)")
+        elif missing_percentage > 5:
+            warnings.append(f"Moderate missing data: {missing_percentage:.1f}%")
+        else:
+            logger.info(f"✅ Low missing data: {missing_percentage:.1f}%")
+        
+        # 5. Volatility bounds checking
+        if 'Close' in data.columns:
+            daily_returns = data['Close'].pct_change().dropna()
+            daily_vol = daily_returns.std()
+            extreme_moves = (abs(daily_returns) > 0.1).sum()  # >10% daily moves
+            
+            if daily_vol > 0.05:  # >5% daily volatility
+                warnings.append(f"High volatility detected: {daily_vol*100:.1f}% daily")
+            
+            if extreme_moves > len(daily_returns) * 0.05:  # >5% of days with extreme moves
+                warnings.append(f"Many extreme price moves: {extreme_moves} days >10%")
+        
+        # 6. Data consistency checks
+        if all(col in data.columns for col in ['Open', 'High', 'Low', 'Close']):
+            # Check OHLC consistency
+            invalid_ohlc = (
+                (data['High'] < data['Low']) |
+                (data['High'] < data['Open']) |
+                (data['High'] < data['Close']) |
+                (data['Low'] > data['Open']) |
+                (data['Low'] > data['Close'])
+            ).sum()
+            
+            if invalid_ohlc > 0:
+                issues.append(f"Invalid OHLC data: {invalid_ohlc} rows")
+        
+        # 7. Time series continuity
+        if hasattr(data.index, 'to_series'):
+            date_gaps = data.index.to_series().diff().dt.days
+            large_gaps = (date_gaps > 7).sum()  # Gaps > 1 week
+            
+            if large_gaps > 10:
+                warnings.append(f"Many large time gaps: {large_gaps} gaps >7 days")
+        
+        # Summary
+        is_valid = len(issues) == 0
+        
+        if is_valid:
+            logger.info(f"✅ Data quality validation passed for {source_name}")
+            if warnings:
+                logger.warning(f"⚠️ {len(warnings)} warnings for {source_name}")
+        else:
+            logger.error(f"❌ Data quality validation failed for {source_name}: {len(issues)} issues")
+        
+        return is_valid, issues, warnings
+    
+    def cross_validate_data_sources(self, primary_data, backup_data, source1_name, source2_name):
+        """Cross-validate data between two sources"""
+        logger.info(f"🔄 Cross-validating {source1_name} vs {source2_name}...")
+        
+        if primary_data.empty or backup_data.empty:
+            return False, ["One or both datasets are empty"]
+        
+        # Align dates
+        common_dates = primary_data.index.intersection(backup_data.index)
+        
+        if len(common_dates) < 50:
+            return False, [f"Insufficient overlapping data: {len(common_dates)} common dates"]
+        
+        # Compare prices
+        p1_prices = primary_data.loc[common_dates, 'Close']
+        p2_prices = backup_data.loc[common_dates, 'Close']
+        
+        # Calculate price correlation
+        correlation = p1_prices.corr(p2_prices)
+        
+        if correlation < 0.8:
+            return False, [f"Low price correlation: {correlation:.3f} (minimum 0.8)"]
+        
+        # Calculate average price difference
+        price_diff_pct = abs((p1_prices - p2_prices) / p1_prices).mean() * 100
+        
+        if price_diff_pct > 5:
+            return False, [f"Large price differences: {price_diff_pct:.1f}% average deviation"]
+        
+        logger.info(f"✅ Cross-validation passed: {correlation:.3f} correlation, {price_diff_pct:.1f}% avg difference")
+        return True, []
+    
     def collect_extended_training_data(self, period="10y"):
-        """Collect 10 years of training data for 1-year predictions"""
+        """Collect 10 years of training data with quality validation"""
         logger.info(f"📊 Collecting {period} of training data for extended ML models...")
         
         try:
-            # Try multiple data sources with better error handling
+            # Try multiple data sources with comprehensive validation
             gold = pd.DataFrame()
             current_source = None
+            backup_data = pd.DataFrame()
             
-            # Try different tickers in order of preference
+            # Data sources in order of preference
             data_sources = [
-                ('GC=F', 1.0),      # Gold futures (primary)
-                ('GLD', 11.0),      # SPDR Gold Trust ETF (scale to futures price)
-                ('IAU', 45.0),      # iShares Gold Trust (scale to futures price)
-                ('XAUUSD=X', 1.0),  # Gold spot price
+                ('GC=F', 1.0, 'Gold Futures'),
+                ('GLD', 11.0, 'SPDR Gold ETF'),
+                ('IAU', 45.0, 'iShares Gold ETF'),
+                ('XAUUSD=X', 1.0, 'Gold Spot Price'),
             ]
             
-            for ticker, scale_factor in data_sources:
+            for ticker, scale_factor, description in data_sources:
                 try:
-                    logger.info(f"Trying {ticker}...")
-                    # Use different periods to ensure we get data
+                    logger.info(f"Trying {ticker} ({description})...")
+                    
+                    # Try different periods to ensure we get data
                     for test_period in [period, "5y", "3y", "2y"]:
                         try:
-                            gold = yf.download(ticker, period=test_period, interval='1d', progress=False)
+                            temp_data = yf.download(ticker, period=test_period, interval='1d', progress=False)
                             
-                            if not gold.empty and len(gold) >= 500:  # Need at least 500 samples
-                                current_source = ticker
-                                logger.info(f"✅ Successfully got {len(gold)} samples from {ticker} ({test_period})")
-                                break
-                        except:
+                            if not temp_data.empty and len(temp_data) >= 500:
+                                # Scale ETF data to futures equivalent if needed
+                                if scale_factor != 1.0:
+                                    for col in ['Open', 'High', 'Low', 'Close']:
+                                        if col in temp_data.columns:
+                                            temp_data[col] *= scale_factor
+                                    logger.info(f"📊 Scaled {ticker} by {scale_factor}x to match futures prices")
+                                
+                                # Validate data quality
+                                is_valid, issues, warnings = self.validate_data_quality(temp_data, f"{ticker} ({description})")
+                                
+                                if is_valid:
+                                    if gold.empty:
+                                        gold = temp_data.copy()
+                                        current_source = f"{ticker} ({description})"
+                                        logger.info(f"✅ Primary source: {current_source}")
+                                    else:
+                                        # Cross-validate with primary source
+                                        cross_valid, cross_issues = self.cross_validate_data_sources(
+                                            gold, temp_data, current_source, f"{ticker} ({description})"
+                                        )
+                                        if cross_valid:
+                                            backup_data = temp_data.copy()
+                                            logger.info(f"✅ Backup source validated: {ticker} ({description})")
+                                
+                                break  # Found good data for this ticker
+                        except Exception as e:
+                            logger.warning(f"Failed to download {ticker} ({test_period}): {e}")
                             continue
                     
-                    if not gold.empty:
-                        break
+                    if not gold.empty and len(gold) >= 500:
+                        break  # We have good primary data
                         
                 except Exception as e:
-                    logger.warning(f"Failed to get data from {ticker}: {e}")
+                    logger.warning(f"Failed to process {ticker}: {e}")
                     continue
             
             # If all sources fail, try a fallback approach with manually created data
@@ -928,6 +1102,223 @@ class EnhancedAutoMLTrainer:
             except:
                 return 0
         return prices.rolling(window).apply(calc_slope)
+    
+    def update_progress(self, step, percent, details=""):
+        """Update training progress with timestamp and logging"""
+        import time
+        
+        self.training_progress.update({
+            'current_step': step,
+            'progress_percent': percent,
+            'last_update': datetime.now().isoformat(),
+            'details': details
+        })
+        
+        # Add to detailed log
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'step': step,
+            'progress': percent,
+            'details': details
+        }
+        self.training_progress['detailed_log'].append(log_entry)
+        
+        # Keep only last 50 log entries
+        if len(self.training_progress['detailed_log']) > 50:
+            self.training_progress['detailed_log'] = self.training_progress['detailed_log'][-50:]
+        
+        logger.info(f"📊 Progress: {percent:.1f}% - {step} - {details}")
+    
+    def get_training_progress(self):
+        """Get current training progress with ETA calculation"""
+        progress = self.training_progress.copy()
+        
+        # Calculate estimated time remaining
+        if self.is_training and progress['start_time']:
+            try:
+                start_time = datetime.fromisoformat(progress['start_time'])
+                elapsed = (datetime.now() - start_time).total_seconds()
+                
+                if progress['progress_percent'] > 0:
+                    total_estimated = elapsed / (progress['progress_percent'] / 100)
+                    remaining = max(0, total_estimated - elapsed)
+                    progress['estimated_time_remaining'] = int(remaining)
+                else:
+                    progress['estimated_time_remaining'] = 0
+            except:
+                progress['estimated_time_remaining'] = 0
+            
+        return progress
+    
+    def train_extended_models_with_progress(self):
+        """Train models with detailed progress tracking"""
+        try:
+            self.is_training = True
+            self.training_progress['status'] = 'running'
+            self.training_progress['start_time'] = datetime.now().isoformat()
+            
+            # Step 1: Data Collection (15% of total time)
+            self.update_progress("Initializing Training", 0, "Setting up training environment...")
+            
+            self.update_progress("Collecting Historical Data", 5, "Downloading 10 years of gold price data...")
+            training_data = self.collect_extended_training_data(period="10y")
+            
+            if training_data.empty:
+                raise ValueError("Failed to collect training data")
+            
+            self.update_progress("Data Collection Complete", 15, f"Collected {len(training_data)} samples")
+            
+            # Step 2: Feature Engineering (20% of total time)
+            self.update_progress("Engineering Features", 20, "Creating 300+ technical indicators...")
+            
+            # Use existing feature engineering method
+            training_data = self.engineer_features(training_data)
+            feature_cols = [col for col in training_data.columns 
+                           if col not in ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume'] 
+                           and training_data[col].dtype in ['float64', 'int64']]
+            
+            self.update_progress("Feature Engineering Complete", 35, f"{len(feature_cols)} features ready")
+            
+            # Step 3: Model Training (60% of total time)
+            self.training_progress['total_models'] = len(self.horizons)
+            
+            X = training_data[feature_cols].fillna(method='ffill').fillna(method='bfill')
+            results = {}
+            
+            for i, horizon in enumerate(self.horizons):
+                horizon_name = self.horizon_names[horizon]
+                model_progress = 35 + (i / len(self.horizons)) * 55
+                
+                self.update_progress(
+                    f"Training Model {i+1}/{len(self.horizons)}", 
+                    model_progress,
+                    f"Training {horizon_name} prediction model..."
+                )
+                self.training_progress['current_model'] = horizon_name
+                self.training_progress['models_completed'] = i
+                
+                # Create target
+                y = (training_data['Close'].shift(-horizon) / training_data['Close'] - 1) * 100
+                
+                # Align data
+                mask = ~(X.isna().any(axis=1) | y.isna())
+                X_clean = X[mask]
+                y_clean = y[mask]
+                
+                if len(X_clean) < 200:
+                    self.update_progress(
+                        f"Skipping {horizon_name}", 
+                        model_progress,
+                        f"Insufficient data ({len(X_clean)} samples)"
+                    )
+                    continue
+                
+                # Train using existing method
+                try:
+                    model_result = self._train_single_horizon(X_clean, y_clean, horizon, horizon_name)
+                    results[horizon_name] = model_result
+                    
+                    self.update_progress(
+                        f"Completed {horizon_name} Model", 
+                        model_progress,
+                        f"Model trained with {len(X_clean)} samples, Accuracy: {model_result.get('accuracy', 'N/A')}"
+                    )
+                except Exception as e:
+                    self.update_progress(
+                        f"Failed {horizon_name} Model", 
+                        model_progress,
+                        f"Error: {str(e)}"
+                    )
+            
+            # Step 4: Saving Models (5% of total time)
+            self.update_progress("Saving Models", 95, "Serializing trained models to disk...")
+            
+            # Save training summary
+            summary = {
+                'training_completed': datetime.now().isoformat(),
+                'total_models': len(results),
+                'model_performance': results,
+                'horizons_trained': list(results.keys())
+            }
+            
+            self.update_progress("Training Complete!", 100, f"Successfully trained {len(results)} models")
+            
+            self.training_progress['status'] = 'completed'
+            self.is_training = False
+            
+            return {
+                'status': 'success',
+                'timestamp': datetime.now().isoformat(),
+                'models_trained': len(results),
+                'horizons': list(results.keys()),
+                'summary': f"Trained {len(results)} models with 300+ features"
+            }
+            
+        except Exception as e:
+            self.update_progress("Training Failed", 0, f"Error: {str(e)}")
+            self.training_progress['status'] = 'failed'
+            self.is_training = False
+            logger.error(f"Extended training failed: {e}")
+            raise e
+    
+    def _train_single_horizon(self, X, y, horizon, horizon_name):
+        """Train a single horizon model using existing logic"""
+        # Reuse the existing training logic from train_extended_models
+        algorithms = {
+            'random_forest': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42),
+            'gradient_boost': GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, random_state=42),
+            'extra_trees': ExtraTreesRegressor(n_estimators=100, max_depth=10, random_state=42),
+            'ridge': Ridge(alpha=1.0),
+        }
+        
+        best_model = None
+        best_score = float('inf')
+        best_name = None
+        
+        # Test algorithms for this horizon
+        tscv = TimeSeriesSplit(n_splits=5)
+        
+        for name, model in algorithms.items():
+            try:
+                scores = cross_val_score(model, X, y, cv=tscv, scoring='neg_mean_absolute_error')
+                avg_score = -scores.mean()
+                
+                if avg_score < best_score:
+                    best_score = avg_score
+                    best_model = model
+                    best_name = name
+            except:
+                continue
+        
+        if best_model is not None:
+            # Train final model
+            best_model.fit(X, y)
+            
+            # Save model
+            model_path = self.model_dir / f"gold_extended_{horizon_name}.pkl"
+            joblib.dump(best_model, model_path)
+            
+            # Calculate accuracy metrics
+            y_pred = best_model.predict(X)
+            mae = mean_absolute_error(y, y_pred)
+            r2 = r2_score(y, y_pred)
+            
+            return {
+                'horizon_days': horizon,
+                'horizon_name': horizon_name,
+                'model_type': best_name,
+                'mae': mae,
+                'r2': r2,
+                'accuracy': f"{max(0, min(100, (1 - mae/10) * 100)):.1f}%",
+                'training_samples': len(X),
+                'model_path': str(model_path)
+            }
+        
+        return {
+            'horizon_days': horizon,
+            'horizon_name': horizon_name,
+            'error': 'Failed to train model'
+        }
 
 # Create global trainer instance
 enhanced_trainer = EnhancedAutoMLTrainer()

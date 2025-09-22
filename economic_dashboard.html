@@ -516,7 +516,7 @@
                 
                 <div class="control-panel">
                     <button class="button primary" onclick="trainMLModels()">🚀 Start Basic Training (14 days)</button>
-                    <button class="button primary" onclick="trainExtendedMLModels()">🚀 Start Extended Training (1 Year)</button>
+                    <button class="button primary" onclick="trainExtendedMLModelsWithProgress()">🚀 Start Extended Training (1 Year)</button>
                     <button class="button secondary" onclick="getTrainingStatus()">📊 Training Status</button>
                     <button class="button secondary" onclick="getMLPredictions()">🔮 Basic Predictions</button>
                     <button class="button secondary" onclick="getExtendedPredictions()">🔮 Extended Predictions</button>
@@ -1424,6 +1424,33 @@
             }
         }
 
+        // Progress tracking version of extended training
+        async function trainExtendedMLModelsWithProgress() {
+            // Show progress container
+            document.getElementById('progressContainer').style.display = 'block';
+            
+            // Start training
+            try {
+                const response = await fetch(`${API_BASE}/start-extended-training-async`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'started') {
+                    // Start polling for progress
+                    startProgressPolling();
+                } else if (data.status === 'already_running') {
+                    startProgressPolling();
+                    showInfo('Training already in progress. Showing current status...');
+                } else {
+                    showError('Failed to start training: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Training request failed: ' + error.message);
+                document.getElementById('progressContainer').style.display = 'none';
+            }
+        }
+
         async function getExtendedPredictions() {
             const content = document.getElementById('ml-content');
             content.innerHTML = '<div class="loading">🔮 Getting Extended ML predictions (1 day to 1 year)...</div>';
@@ -1523,6 +1550,101 @@
                     </div>
                 `;
             }
+        }
+
+        // Progress tracking functions
+        let progressInterval = null;
+
+        function startProgressPolling() {
+            // Clear any existing interval
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+            
+            // Poll every 2 seconds
+            progressInterval = setInterval(updateProgress, 2000);
+            updateProgress(); // Initial update
+        }
+
+        function updateProgress() {
+            fetch(`${API_BASE}/training-progress`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const progress = data.progress;
+                        
+                        // Update progress bar
+                        document.getElementById('progressFill').style.width = `${progress.progress_percent}%`;
+                        document.getElementById('progressPercent').textContent = `${progress.progress_percent.toFixed(1)}%`;
+                        document.getElementById('progressStatus').textContent = progress.current_step;
+                        
+                        // Update details
+                        const details = [
+                            `Models: ${progress.models_completed}/${progress.total_models}`,
+                            `Current: ${progress.current_model || 'N/A'}`,
+                            progress.details || ''
+                        ].filter(d => d).join(' | ');
+                        
+                        document.getElementById('progressDetails').textContent = details;
+                        
+                        // Update ETA
+                        if (progress.estimated_time_remaining > 0) {
+                            const eta = Math.ceil(progress.estimated_time_remaining / 60);
+                            document.getElementById('progressETA').textContent = `Estimated time remaining: ${eta} minutes`;
+                        } else {
+                            document.getElementById('progressETA').textContent = 'Calculating time remaining...';
+                        }
+                        
+                        // Update log
+                        if (progress.detailed_log) {
+                            const logHtml = progress.detailed_log
+                                .slice(-10) // Show last 10 entries
+                                .map(entry => `[${new Date(entry.timestamp).toLocaleTimeString()}] ${entry.step} - ${entry.details}`)
+                                .join('\n');
+                            document.getElementById('progressLog').textContent = logHtml;
+                        }
+                        
+                        // Add pulsing effect during training
+                        const container = document.getElementById('progressContainer');
+                        if (progress.status === 'running') {
+                            container.classList.add('training-active');
+                        } else {
+                            container.classList.remove('training-active');
+                        }
+                        
+                        // Stop polling when complete
+                        if (progress.status === 'completed' || progress.status === 'failed') {
+                            clearInterval(progressInterval);
+                            progressInterval = null;
+                            
+                            if (progress.status === 'completed') {
+                                showSuccess('Extended training completed successfully!');
+                                // Refresh predictions
+                                setTimeout(getExtendedPredictions, 2000);
+                            } else {
+                                showError('Training failed. Check the log for details.');
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Progress update failed:', error);
+                });
+        }
+
+        function showSuccess(message) {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = `<div class="info-box success"><h3>✅ ${message}</h3></div>`;
+        }
+
+        function showError(message) {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = `<div class="info-box error"><h3>❌ ${message}</h3></div>`;
+        }
+
+        function showInfo(message) {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = `<div class="info-box info"><h3>ℹ️ ${message}</h3></div>`;
         }
 
         // Initialize dashboard

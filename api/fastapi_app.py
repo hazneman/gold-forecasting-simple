@@ -1129,6 +1129,54 @@ async def start_extended_training():
         logger.error(f"Extended training error: {e}")
         raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
 
+@app.post("/start-extended-training-async")
+async def start_extended_training_async(background_tasks: BackgroundTasks):
+    """Start extended training in background with progress tracking"""
+    try:
+        if enhanced_trainer.is_training:
+            return {
+                "status": "already_running",
+                "message": "Training is already in progress",
+                "progress": enhanced_trainer.get_training_progress()
+            }
+        
+        # Start training in background
+        background_tasks.add_task(enhanced_trainer.train_extended_models_with_progress)
+        
+        return {
+            "status": "started",
+            "message": "Extended training started in background",
+            "estimated_duration": "15-20 minutes",
+            "progress_endpoint": "/training-progress"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start async training: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}")
+
+@app.get("/training-progress")
+async def get_training_progress():
+    """Get real-time training progress"""
+    try:
+        progress = enhanced_trainer.get_training_progress()
+        
+        return {
+            "status": "success",
+            "progress": progress
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get training progress: {e}")
+        return {
+            "status": "error", 
+            "error": str(e),
+            "progress": {
+                "status": "error",
+                "progress_percent": 0,
+                "current_step": "Error getting progress"
+            }
+        }
+
 @app.get("/extended-predictions")
 async def get_extended_predictions():
     """Get extended predictions from 1 day to 1 year"""
