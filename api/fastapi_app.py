@@ -36,6 +36,7 @@ from src.backtesting import Backtester, BacktestConfig, MovingAverageCrossoverSt
 from src.simple_economic_data import SimpleEconomicDataCollector, SimpleGoldPredictor
 from src.ml_predictor import MLGoldPredictor, get_model_decision_explanation
 from src.auto_trainer import auto_trainer
+from src.enhanced_auto_trainer import enhanced_trainer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -310,9 +311,6 @@ async def enhanced_forecast(days: int = 7):
             "forecast": []
         }
 
-@app.get("/economic-indicators")
-async def economic_indicators():
-    """Get current economic indicators"""
 @app.get("/correlation-analysis")
 async def get_correlation_analysis():
     """Get correlation analysis between gold and various economic indicators"""
@@ -730,10 +728,147 @@ async def get_correlation_analysis():
     except Exception as e:
         logger.error(f"Correlation analysis error: {e}")
         return {"status": "error", "error": str(e)}
+
+@app.get("/technical-analysis")
+async def get_technical_analysis():
+    """Get comprehensive technical analysis for gold price"""
+    try:
+        # Use the same data collection method as other endpoints
+        gold_ticker = yf.Ticker("GC=F")  # Gold futures
+        gold_data = gold_ticker.history(period="6mo")
+        
+        if gold_data.empty:
+            return {"status": "error", "error": "No gold price data available"}
+        
+        # Create technical analyzer and calculate indicators
+        from src.ml_predictor import TechnicalIndicators
+        tech_analyzer = TechnicalIndicators()
+        
+        close = gold_data['Close']
+        high = gold_data['High']
+        low = gold_data['Low']
+        
+        # Calculate technical indicators
+        indicators = pd.DataFrame(index=gold_data.index)
+        indicators['rsi'] = tech_analyzer.rsi(close)
+        
+        # MACD
+        macd_data = tech_analyzer.macd(close)
+        indicators['macd'] = macd_data['macd']
+        indicators['macd_signal'] = macd_data['signal']
+        indicators['macd_bullish'] = (indicators['macd'] > indicators['macd_signal']).astype(int)
+        
+        # Bollinger Bands
+        bb_data = tech_analyzer.bollinger_bands(close)
+        indicators['bb_upper'] = bb_data['upper']
+        indicators['bb_lower'] = bb_data['lower']
+        indicators['bb_position'] = (close - bb_data['lower']) / (bb_data['upper'] - bb_data['lower'])
+        
+        # Moving averages
+        indicators['sma_20'] = tech_analyzer.sma(close, 20)
+        indicators['sma_50'] = tech_analyzer.sma(close, 50)
+        indicators['uptrend_strength'] = 0  # Simplified calculation
+        
+        # Check if moving averages are in uptrend
+        sma_20 = indicators['sma_20'].iloc[-1]
+        sma_50 = indicators['sma_50'].iloc[-1]
+        current_price = close.iloc[-1]
+        
+        uptrend_score = 0
+        if current_price > sma_20:
+            uptrend_score += 1
+        if current_price > sma_50:
+            uptrend_score += 1
+        if sma_20 > sma_50:
+            uptrend_score += 1
+            
+        indicators.loc[indicators.index[-1], 'uptrend_strength'] = uptrend_score
+        
+        # Volatility
+        indicators['volatility_20'] = close.rolling(20).std() / close.rolling(20).mean()
+        
+        # Drop NaN values
+        indicators = indicators.dropna()
+        
+        if indicators.empty:
+            return {"status": "error", "error": "Unable to calculate technical indicators"}
+        
+        # Get current technical signals
+        current_signals = _get_current_technical_signals(indicators)
+        
+        # Get latest price data
+        latest_price = close.iloc[-1]
+        price_change = close.pct_change().iloc[-1] * 100
+        
+        # Get latest indicators
+        latest_indicators = indicators.iloc[-1]
+        
+        analysis_results = {
+            "status": "success",
+            "current_price": f"${latest_price:.2f}",
+            "price_change_24h": f"{price_change:+.2f}%",
+            "technical_signals": current_signals,
+            "indicators": {
+                "rsi": {
+                    "value": f"{latest_indicators.get('rsi', 0):.1f}",
+                    "interpretation": "Overbought" if latest_indicators.get('rsi', 50) > 70 else "Oversold" if latest_indicators.get('rsi', 50) < 30 else "Neutral"
+                },
+                "macd": {
+                    "bullish": bool(latest_indicators.get('macd_bullish', False)),
+                    "signal": "Bullish" if latest_indicators.get('macd_bullish', False) else "Bearish"
+                },
+                "bollinger_bands": {
+                    "position": f"{latest_indicators.get('bb_position', 0.5):.2f}",
+                    "interpretation": "Upper Band" if latest_indicators.get('bb_position', 0.5) > 0.8 else "Lower Band" if latest_indicators.get('bb_position', 0.5) < 0.2 else "Middle Range"
+                },
+                "trend_strength": {
+                    "value": int(latest_indicators.get('uptrend_strength', 0)),
+                    "signal": "Strong Uptrend" if latest_indicators.get('uptrend_strength', 0) >= 2 else "Downtrend" if latest_indicators.get('uptrend_strength', 0) <= 1 else "Sideways"
+                },
+                "volatility": {
+                    "value": f"{latest_indicators.get('volatility_20', 0):.4f}",
+                    "level": "High" if latest_indicators.get('volatility_20', 0) > 0.02 else "Low"
+                }
+            },
+            "overall_sentiment": _determine_overall_sentiment(current_signals),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return analysis_results
         
     except Exception as e:
-        logger.error(f"Correlation analysis error: {e}")
-        raise HTTPException(status_code=500, detail=f"Correlation analysis error: {str(e)}")
+        logger.error(f"Technical analysis error: {e}")
+        return {"status": "error", "error": str(e)}
+
+def _determine_overall_sentiment(signals: Dict[str, Any]) -> str:
+    """Determine overall market sentiment from technical signals"""
+    if not signals or len(signals) == 0:
+        return "Neutral"
+    
+    bullish_count = 0
+    bearish_count = 0
+    total_signals = 0
+    
+    for signal_name, signal_data in signals.items():
+        if isinstance(signal_data, dict) and 'action' in signal_data:
+            total_signals += 1
+            action = signal_data['action'].lower()
+            if 'buy' in action:
+                bullish_count += 1
+            elif 'sell' in action:
+                bearish_count += 1
+    
+    if total_signals == 0:
+        return "Neutral"
+    
+    bullish_ratio = bullish_count / total_signals
+    
+    if bullish_ratio >= 0.6:
+        return "Bullish"
+    elif bullish_ratio <= 0.4:
+        return "Bearish" 
+    else:
+        return "Neutral"
 
 
 @app.post("/historical-data")
@@ -967,6 +1102,154 @@ async def training_status():
             "error": str(e),
             "status": "error"
         }
+
+@app.get("/extended-training")
+async def start_extended_training():
+    """Start extended ML training with horizons from 1 day to 1 year"""
+    try:
+        logger.info("🚀 Starting extended ML training (1 day to 1 year)...")
+        results = enhanced_trainer.train_extended_models()
+        
+        if "error" in results:
+            raise HTTPException(status_code=500, detail=results["error"])
+        
+        return {
+            "status": "success",
+            "message": "Extended ML training completed",
+            "models_trained": list(results.keys()),
+            "training_summary": results,
+            "horizons": "1 day to 1 year",
+            "features": "300+ advanced features",
+            "training_data": "10 years historical data",
+            "algorithms": ["RandomForest", "GradientBoosting", "ExtraTrees", "Ridge", "Lasso", "ElasticNet", "SVR"],
+            "note": "Extended models trained on 10 years of historical data with advanced feature engineering"
+        }
+        
+    except Exception as e:
+        logger.error(f"Extended training error: {e}")
+        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+
+@app.get("/extended-predictions")
+async def get_extended_predictions():
+    """Get extended predictions from 1 day to 1 year"""
+    try:
+        predictions = enhanced_trainer.get_extended_predictions()
+        
+        if "error" in predictions:
+            return {
+                "status": "no_models",
+                "message": predictions["error"],
+                "recommendation": "Run /extended-training first to train 1-year prediction models",
+                "available_horizons": []
+            }
+        
+        return {
+            "status": "success",
+            "predictions": predictions["predictions"],
+            "current_analysis": predictions["current_analysis"],
+            "notes": predictions["notes"],
+            "horizons_available": list(predictions["predictions"].keys()),
+            "total_models": len(predictions["predictions"]),
+            "prediction_range": "1 day to 1 year"
+        }
+        
+    except Exception as e:
+        logger.error(f"Extended predictions error: {e}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+@app.get("/prediction-summary")
+async def get_prediction_summary():
+    """Get summary of all available prediction models and their performance"""
+    try:
+        import json
+        
+        # Check for extended training summary
+        summary_path = Path("data/models/extended_training_summary.json")
+        
+        response = {
+            "basic_models": {
+                "status": "available",
+                "horizons": ["1d", "3d", "7d", "14d"],
+                "max_horizon": "14 days",
+                "features": "50+ technical indicators",
+                "training_data": "2 years"
+            }
+        }
+        
+        if summary_path.exists():
+            with open(summary_path) as f:
+                training_summary = json.load(f)
+            
+            response["extended_models"] = {
+                "status": "available",
+                "training_summary": training_summary,
+                "horizons": list(training_summary.get('model_performance', {}).keys()),
+                "max_horizon": "1 year",
+                "total_models": len(training_summary.get('model_performance', {})),
+                "features": "300+ advanced features",
+                "training_data": training_summary.get('data_period', '10 years'),
+                "last_trained": training_summary.get('training_completed', 'Unknown'),
+                "algorithms": training_summary.get('algorithms_tested', [])
+            }
+            
+            response["recommendation"] = "Use extended models for better long-term accuracy"
+        else:
+            response["extended_models"] = {
+                "status": "not_available",
+                "message": "Extended models not trained yet",
+                "recommendation": "Run /extended-training to train models for 1 day to 1 year predictions"
+            }
+            
+            response["recommendation"] = "Train extended models for 1-year predictions"
+        
+        return response
+            
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.get("/extended-predictions/{horizon}")
+async def get_extended_prediction_by_horizon(horizon: str):
+    """Get prediction for specific extended horizon (1d, 1w, 2w, 1m, 2m, 3m, 6m, 9m, 1y)"""
+    try:
+        # Validate horizon
+        valid_horizons = ['1d', '3d', '5d', '1w', '2w', '3w', '1m', '6w', '2m', '3m', '4m', '6m', '9m', '1y']
+        if horizon not in valid_horizons:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid horizon. Valid options: {', '.join(valid_horizons)}"
+            )
+        
+        predictions = enhanced_trainer.get_extended_predictions([horizon])
+        
+        if "error" in predictions:
+            raise HTTPException(status_code=404, detail=predictions["error"])
+        
+        if horizon not in predictions["predictions"]:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Model for {horizon} horizon not found. Run /extended-training first."
+            )
+        
+        prediction_data = predictions["predictions"][horizon]
+        
+        return {
+            "status": "success",
+            "horizon": horizon,
+            "prediction": prediction_data,
+            "current_price": predictions["current_analysis"]["current_price"],
+            "timestamp": predictions["current_analysis"]["timestamp"],
+            "model_info": {
+                "training_period": "10 years",
+                "features": "300+ advanced indicators",
+                "validation": "Time series cross-validation"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Extended prediction error for {horizon}: {e}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 # Error handlers

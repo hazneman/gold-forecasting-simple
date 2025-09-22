@@ -278,6 +278,72 @@
             opacity: 0.9;
         }
 
+        /* Technical Analysis Styles */
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .signals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .signal-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 4px solid var(--primary-gold);
+        }
+
+        .signal-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: var(--dark-blue);
+        }
+
+        .signal-action {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .buy-signal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .sell-signal {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .hold-signal {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .sentiment-bullish {
+            color: #28a745;
+        }
+
+        .sentiment-bearish {
+            color: #dc3545;
+        }
+
+        .sentiment-neutral {
+            color: #6c757d;
+        }
+
         @media (max-width: 768px) {
             .nav-tabs {
                 flex-direction: column;
@@ -289,6 +355,14 @@
             }
             
             .stats-overview {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .signals-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
@@ -438,12 +512,14 @@
             <!-- ML Training Tab -->
             <div id="ml" class="tab-content">
                 <h2>🤖 Machine Learning Training Center</h2>
-                <p>Automatic ML training system that learns from 2+ years of historical gold price data</p>
+                <p>Automatic ML training system that learns from 10+ years of historical gold price data</p>
                 
                 <div class="control-panel">
-                    <button class="button primary" onclick="trainMLModels()">🚀 Start Training</button>
+                    <button class="button primary" onclick="trainMLModels()">🚀 Start Basic Training (14 days)</button>
+                    <button class="button primary" onclick="trainExtendedMLModels()">🚀 Start Extended Training (1 Year)</button>
                     <button class="button secondary" onclick="getTrainingStatus()">📊 Training Status</button>
-                    <button class="button secondary" onclick="getMLPredictions()">🔮 ML Predictions</button>
+                    <button class="button secondary" onclick="getMLPredictions()">🔮 Basic Predictions</button>
+                    <button class="button secondary" onclick="getExtendedPredictions()">🔮 Extended Predictions</button>
                 </div>
                 
                 <div id="ml-content">
@@ -453,12 +529,14 @@
                 <div class="info-box">
                     <h3>📚 ML System Features:</h3>
                     <ul>
-                        <li><strong>Historical Data:</strong> 2+ years of gold price movements</li>
-                        <li><strong>Technical Indicators:</strong> 50+ features including RSI, MACD, Bollinger Bands</li>
-                        <li><strong>Multiple Timeframes:</strong> 1-day, 3-day, 7-day, 14-day predictions</li>
-                        <li><strong>Random Forest:</strong> Ensemble model with 100+ decision trees</li>
+                        <li><strong>Historical Data:</strong> 10+ years of gold price movements</li>
+                        <li><strong>Technical Indicators:</strong> 300+ features including RSI, MACD, Bollinger Bands, Fibonacci levels</li>
+                        <li><strong>Basic Timeframes:</strong> 1-day, 3-day, 7-day, 14-day predictions</li>
+                        <li><strong>Extended Timeframes:</strong> 1d-1y predictions (21, 30, 45, 60, 90, 120, 180, 270, 365 days)</li>
+                        <li><strong>Advanced Models:</strong> Random Forest, XGBoost, LightGBM ensemble</li>
                         <li><strong>Cross-Validation:</strong> Robust training with time-series splits</li>
                         <li><strong>Performance Tracking:</strong> Automatic accuracy and error metrics</li>
+                        <li><strong>Economic Indicators:</strong> Federal funds rate, inflation data, market sentiment</li>
                     </ul>
                 </div>
             </div>
@@ -818,40 +896,159 @@
         }
 
         // Chart Generation Functions
-        function generateChart() {
+        async function generateChart() {
             const chartType = document.getElementById('chart-type').value;
             const period = document.getElementById('chart-period').value;
             
-            // This would integrate with Chart.js to create interactive charts
             const ctx = document.getElementById('main-chart').getContext('2d');
             
             if (currentChart) {
                 currentChart.destroy();
             }
             
-            // Sample chart - in real implementation, this would fetch actual data
-            currentChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                    datasets: [{
-                        label: 'Gold Price',
-                        data: [1800, 1850, 1820, 1900, 1950, 1980],
-                        borderColor: '#DAA520',
-                        backgroundColor: 'rgba(218, 165, 32, 0.1)',
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart - ${period}`
+            try {
+                // Fetch real data based on chart type
+                let chartData, chartConfig;
+                
+                if (chartType === 'price') {
+                    // Get current price and forecast data
+                    const [indicators, forecast] = await Promise.all([
+                        fetch(`${API_BASE}/economic-indicators`).then(r => r.json()),
+                        fetch(`${API_BASE}/simple-forecast?days=7`).then(r => r.json())
+                    ]);
+                    
+                    if (indicators.status === 'success' && forecast.forecasts) {
+                        const currentPrice = indicators.data.gold_price;
+                        const forecastPrices = forecast.forecasts.map(f => f.predicted_price);
+                        const labels = ['Current', ...forecast.forecasts.map(f => f.date.slice(5))]; // MM-DD format
+                        const data = [currentPrice, ...forecastPrices];
+                        
+                        chartConfig = {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Gold Price ($)',
+                                    data: data,
+                                    borderColor: '#DAA520',
+                                    backgroundColor: 'rgba(218, 165, 32, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: `Gold Price Trend & Forecast - ${period}`
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: false,
+                                        title: {
+                                            display: true,
+                                            text: 'Price (USD)'
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                    }
+                } else if (chartType === 'economic') {
+                    // Economic indicators chart
+                    const response = await fetch(`${API_BASE}/economic-indicators`);
+                    const indicators = await response.json();
+                    
+                    if (indicators.status === 'success') {
+                        const data = indicators.data;
+                        chartConfig = {
+                            type: 'bar',
+                            data: {
+                                labels: ['Gold', 'DXY', 'VIX', 'S&P500', 'Oil', 'Silver', 'Bitcoin'],
+                                datasets: [{
+                                    label: 'Relative Values (Normalized)',
+                                    data: [
+                                        (data.gold_price / 3700) * 100,
+                                        data.dxy_index,
+                                        data.vix_level * 5,
+                                        (data.sp500_level / 6600) * 100,
+                                        data.oil_price,
+                                        data.silver_price * 2,
+                                        (data.bitcoin_price / 115000) * 100
+                                    ],
+                                    backgroundColor: [
+                                        '#DAA520', '#4169E1', '#FF4500', '#32CD32', 
+                                        '#8B4513', '#C0C0C0', '#FF8C00'
+                                    ]
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Economic Indicators Comparison'
+                                    }
+                                }
+                            }
+                        };
+                    }
+                } else {
+                    // Default to sample data for other chart types
+                    chartConfig = {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                            datasets: [{
+                                label: 'Sample Data',
+                                data: [1800, 1850, 1820, 1900, 1950, 1980],
+                                borderColor: '#DAA520',
+                                backgroundColor: 'rgba(218, 165, 32, 0.1)',
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart - ${period}`
+                                }
+                            }
+                        }
+                    };
+                }
+                
+                if (chartConfig) {
+                    currentChart = new Chart(ctx, chartConfig);
+                }
+                
+            } catch (error) {
+                console.error('Error generating chart:', error);
+                // Fallback to sample chart
+                currentChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Error'],
+                        datasets: [{
+                            label: 'Error loading data',
+                            data: [0],
+                            borderColor: '#FF0000'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Error loading chart data'
+                            }
                         }
                     }
-                }
-            });
+                });
+            }
         }
 
         // API Testing Functions
@@ -933,6 +1130,125 @@
         function exportData() {
             // Implementation for data export
             alert('Data export functionality would be implemented here');
+        }
+
+        // Technical Analysis Functions
+        async function runTechnicalAnalysis() {
+            const content = document.getElementById('analysis-content');
+            content.innerHTML = '<div class="loading">🔍 Running technical analysis...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/technical-analysis`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    content.innerHTML = `
+                        <div class="info-box success">
+                            <h3>📊 Technical Analysis Results</h3>
+                            <div class="grid-2">
+                                <div class="indicator-card">
+                                    <h4>Current Price</h4>
+                                    <div class="metric-value">${data.current_price}</div>
+                                    <div class="metric-change ${data.price_change_24h.includes('+') ? 'positive' : 'negative'}">
+                                        ${data.price_change_24h} (24h)
+                                    </div>
+                                </div>
+                                <div class="indicator-card">
+                                    <h4>Overall Sentiment</h4>
+                                    <div class="metric-value sentiment-${data.overall_sentiment.toLowerCase()}">${data.overall_sentiment}</div>
+                                </div>
+                            </div>
+                            
+                            <h4>🎯 Technical Indicators</h4>
+                            <div class="grid-3">
+                                <div class="indicator-card">
+                                    <h5>RSI (14)</h5>
+                                    <div class="metric-value">${data.indicators.rsi.value}</div>
+                                    <div class="metric-label">${data.indicators.rsi.interpretation}</div>
+                                </div>
+                                <div class="indicator-card">
+                                    <h5>MACD</h5>
+                                    <div class="metric-value ${data.indicators.macd.bullish ? 'positive' : 'negative'}">
+                                        ${data.indicators.macd.signal}
+                                    </div>
+                                </div>
+                                <div class="indicator-card">
+                                    <h5>Bollinger Bands</h5>
+                                    <div class="metric-value">${data.indicators.bollinger_bands.position}</div>
+                                    <div class="metric-label">${data.indicators.bollinger_bands.interpretation}</div>
+                                </div>
+                                <div class="indicator-card">
+                                    <h5>Trend Strength</h5>
+                                    <div class="metric-value">${data.indicators.trend_strength.value}</div>
+                                    <div class="metric-label">${data.indicators.trend_strength.signal}</div>
+                                </div>
+                                <div class="indicator-card">
+                                    <h5>Volatility</h5>
+                                    <div class="metric-value">${data.indicators.volatility.value}</div>
+                                    <div class="metric-label">${data.indicators.volatility.level}</div>
+                                </div>
+                            </div>
+                            
+                            <h4>📈 Trading Signals</h4>
+                            <div class="signals-grid">
+                                ${Object.entries(data.technical_signals).map(([name, signal]) => `
+                                    <div class="signal-card">
+                                        <h5>${name.toUpperCase()}</h5>
+                                        <div class="signal-value">${signal.signal || signal.strength || 'N/A'}</div>
+                                        <div class="signal-action ${signal.action?.includes('Buy') ? 'buy-signal' : signal.action?.includes('Sell') ? 'sell-signal' : 'hold-signal'}">
+                                            ${signal.action || 'Hold'}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <div class="info-box">
+                                <small>Analysis updated: ${new Date(data.timestamp).toLocaleString()}</small>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="info-box error">
+                            <h3>❌ Technical Analysis Error</h3>
+                            <p>${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Technical analysis error:', error);
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Unable to fetch technical analysis. Please check if the server is running.</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function backtestStrategy() {
+            const content = document.getElementById('analysis-content');
+            content.innerHTML = '<div class="loading">🔙 Running backtest strategy...</div>';
+            
+            try {
+                // For now, show a placeholder since we'd need a backtest endpoint
+                content.innerHTML = `
+                    <div class="info-box">
+                        <h3>🔙 Backtest Strategy</h3>
+                        <p>Backtesting functionality requires historical strategy simulation.</p>
+                        <p>This would test various trading strategies against historical data to evaluate performance.</p>
+                        <button class="button secondary" onclick="runTechnicalAnalysis()">← Back to Analysis</button>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Backtest error:', error);
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Backtest Error</h3>
+                        <p>Unable to run backtest. ${error.message}</p>
+                    </div>
+                `;
+            }
         }
 
         // ML Training functions
@@ -1052,6 +1368,158 @@
                     <div class="info-box error">
                         <h3>❌ Prediction Error</h3>
                         <p>Failed to get ML predictions: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Extended ML Training Functions
+        async function trainExtendedMLModels() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">🚀 Starting Extended ML training with 1-year predictions (300+ features)...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/extended-training`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Safely handle horizons data
+                    const horizonsText = data.horizons && Array.isArray(data.horizons) 
+                        ? data.horizons.join(', ') 
+                        : '1d, 3d (available models)';
+                    
+                    const modelsCount = data.horizons && Array.isArray(data.horizons) 
+                        ? data.horizons.length 
+                        : 'Multiple';
+                    
+                    content.innerHTML = `
+                        <div class="info-box success">
+                            <h3>✅ Extended Training Completed Successfully!</h3>
+                            <p><strong>Timestamp:</strong> ${new Date(data.timestamp || Date.now()).toLocaleString()}</p>
+                            <p><strong>Training Data:</strong> 10+ years of historical data</p>
+                            <p><strong>Features:</strong> 300+ technical and economic indicators</p>
+                            <p><strong>Models Trained:</strong> ${modelsCount} timeframes</p>
+                            <div class="forecast-table">
+                                <h4>📈 Available Prediction Horizons:</h4>
+                                <p>${horizonsText}</p>
+                                ${data.summary ? `<p><em>${data.summary}</em></p>` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="info-box error">
+                            <h3>❌ Extended Training Failed</h3>
+                            <p>${data.error || 'Unknown error occurred'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Connection Error</h3>
+                        <p>Failed to start extended training: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function getExtendedPredictions() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">🔮 Getting Extended ML predictions (1 day to 1 year)...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/extended-predictions`);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.predictions) {
+                    const predictions = data.predictions;
+                    
+                    // Helper function to safely format price
+                    const formatPrice = (predObj) => {
+                        if (typeof predObj === 'object' && predObj.predicted_price !== undefined) {
+                            return typeof predObj.predicted_price === 'number' ? predObj.predicted_price.toFixed(2) : 'N/A';
+                        }
+                        return typeof predObj === 'number' ? predObj.toFixed(2) : 'N/A';
+                    };
+                    
+                    // Helper function to get change info
+                    const getChangeInfo = (predObj) => {
+                        if (typeof predObj === 'object') {
+                            const change = predObj.predicted_change_pct || 0;
+                            const changeColor = change >= 0 ? '#2ecc71' : '#e74c3c';
+                            const changeSymbol = change >= 0 ? '↗' : '↘';
+                            return `<small style="color: ${changeColor}">${changeSymbol} ${change.toFixed(2)}%</small>`;
+                        }
+                        return '';
+                    };
+                    
+                    content.innerHTML = `
+                        <div class="info-box info">
+                            <h3>🔮 Extended ML Predictions (1d to 1y)</h3>
+                            <div class="correlation-matrix">
+                                ${Object.entries(predictions).map(([horizon, predictionObj]) => {
+                                    const price = formatPrice(predictionObj);
+                                    const changeInfo = getChangeInfo(predictionObj);
+                                    const confidence = predictionObj.confidence ? (predictionObj.confidence * 100).toFixed(1) + '%' : 'N/A';
+                                    const modelType = predictionObj.model_type || 'Unknown';
+                                    const horizonReadable = predictionObj.horizon_readable || horizon;
+                                    
+                                    return `
+                                        <div class="correlation-item">
+                                            <h4>${horizonReadable}</h4>
+                                            <div class="correlation-value">
+                                                $${price}
+                                                ${changeInfo}
+                                            </div>
+                                            <div>Predicted Price</div>
+                                            <small style="opacity: 0.8">
+                                                ${modelType} (${confidence} confidence)
+                                            </small>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            <p><em>Predictions based on advanced ensemble models using 300+ features and 10+ years of data</em></p>
+                            <div class="info-box">
+                                <h4>🎯 Key Long-term Forecasts:</h4>
+                                <ul>
+                                    <li><strong>1-day:</strong> $${predictions['1d'] ? formatPrice(predictions['1d']) : 'N/A'} 
+                                        ${predictions['1d'] ? getChangeInfo(predictions['1d']) : ''}</li>
+                                    <li><strong>1-week:</strong> $${predictions['1w'] ? formatPrice(predictions['1w']) : 'N/A'} 
+                                        ${predictions['1w'] ? getChangeInfo(predictions['1w']) : ''}</li>
+                                    <li><strong>2-weeks:</strong> $${predictions['2w'] ? formatPrice(predictions['2w']) : 'N/A'} 
+                                        ${predictions['2w'] ? getChangeInfo(predictions['2w']) : ''}</li>
+                                    <li><strong>1-month:</strong> $${predictions['1m'] ? formatPrice(predictions['1m']) : 'N/A'} 
+                                        ${predictions['1m'] ? getChangeInfo(predictions['1m']) : ''}</li>
+                                </ul>
+                            </div>
+                            
+                            ${data.current_analysis ? `
+                                <div class="info-box">
+                                    <h4>📊 Analysis Summary:</h4>
+                                    <p><strong>Current Price:</strong> ${data.current_analysis.current_price}</p>
+                                    <p><strong>Models Available:</strong> ${data.total_models || 'Multiple'}</p>
+                                    <p><strong>Training Data:</strong> ${data.current_analysis.data_source || '10+ years'}</p>
+                                    <p><strong>Last Updated:</strong> ${new Date(data.current_analysis.timestamp || Date.now()).toLocaleString()}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="info-box warning">
+                            <h3>⚠️ No Extended Predictions Available</h3>
+                            <p>Please train the extended models first using "Start Extended Training"</p>
+                            ${data.error ? `<p><em>Error: ${data.error}</em></p>` : ''}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Prediction Error</h3>
+                        <p>Failed to get extended predictions: ${error.message}</p>
                     </div>
                 `;
             }

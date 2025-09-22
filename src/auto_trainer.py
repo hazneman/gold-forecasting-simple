@@ -41,20 +41,24 @@ class AutoMLTrainer:
         logger.info(f"📊 Collecting {years} years of gold price data...")
         
         try:
-            # Get gold price data
+            # Get gold price data - use multiple fallbacks for reliability
             end_date = datetime.now()
             start_date = end_date - timedelta(days=years * 365)
             
+            # Try gold futures first (most accurate price representation)
             gold = yf.download('GC=F', start=start_date, end=end_date, progress=False)
+            data_source = 'GC=F (Gold Futures)'
             
             if gold.empty:
-                logger.warning("No data found for GC=F, trying GOLD")
-                gold = yf.download('GOLD', start=start_date, end=end_date, progress=False)
+                logger.warning("No data found for GC=F, trying XAUUSD=X")
+                gold = yf.download('XAUUSD=X', start=start_date, end=end_date, progress=False)
+                data_source = 'XAUUSD=X (Gold Spot)'
             
             if gold.empty:
-                raise ValueError("Could not fetch gold price data")
+                logger.error("❌ Could not fetch gold price data from any source")
+                raise ValueError("Could not fetch gold price data - all sources failed")
             
-            logger.info(f"📈 Downloaded {len(gold)} days of data")
+            logger.info(f"📈 Downloaded {len(gold)} days of data from {data_source}")
             
             # Handle multi-level columns from yfinance
             if gold.columns.nlevels > 1:
@@ -63,6 +67,17 @@ class AutoMLTrainer:
             
             # Create a clean copy with basic columns
             df = gold[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
+            
+            # Log current price to verify data source correctness
+            current_price = df['Close'].iloc[-1]
+            logger.info(f"💰 Current gold price from {data_source}: ${current_price:.2f}")
+            
+            # Validate price range (gold should be > $1000/oz)
+            if current_price < 1000:
+                logger.error(f"❌ Suspicious price data: ${current_price:.2f} - likely wrong data source")
+                raise ValueError(f"Gold price ${current_price:.2f} seems too low - possible data source error")
+            
+            logger.info(f"✅ Price validation passed: ${current_price:.2f} is reasonable for gold")
             
             # Forward fill any missing values
             df = df.ffill()
