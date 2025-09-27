@@ -1,0 +1,65 @@
+name: Deploy Azure Function App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_FUNCTIONAPP_NAME: 'gold-forecasting-api'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@v4
+
+    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 'Create and start virtual environment'
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+
+    - name: 'Install dependencies'
+      run: |
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+
+    - name: 'Clean up for deployment'
+      run: |
+        # Remove development files that aren't needed
+        rm -rf .pytest_cache
+        rm -rf __pycache__
+        rm -rf .git
+        find . -name "*.pyc" -delete
+        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+        # Keep data structure but remove large model files (will be recreated)
+        mkdir -p data/models
+        mkdir -p data/processed
+        # Remove any existing models to save space
+        rm -f data/models/*.pkl 2>/dev/null || true
+
+    - name: 'Deploy to Azure Functions'
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        slot-name: 'production'
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
+
+    - name: 'Deployment Success'
+      run: |
+        echo "🎉 Gold Price Forecasting API deployed successfully!"
+        echo "🔗 Function App URL: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net"
+        echo "📊 Dashboard: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/dashboard"
+        echo "🔮 Predictions: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/api/extended-predictions"

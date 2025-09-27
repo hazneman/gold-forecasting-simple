@@ -366,6 +366,159 @@
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
+        /* Progress Container Styles */
+        .progress-wrapper {
+            background: var(--light-gray);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 5px solid var(--primary-gold);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, var(--primary-gold), var(--secondary-gold));
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        #progressText {
+            font-weight: bold;
+            color: var(--dark-blue);
+            margin-bottom: 10px;
+        }
+
+        .progress-details {
+            font-size: 0.9em;
+            color: var(--medium-gray);
+            margin-bottom: 15px;
+        }
+
+        .training-log {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            border: 1px solid #dee2e6;
+        }
+
+        .training-log .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .training-log .log-entry.success {
+            color: var(--success-green);
+        }
+
+        .training-log .log-entry.warning {
+            color: var(--warning-orange);
+        }
+
+        .training-log .log-entry.error {
+            color: var(--danger-red);
+        }
+
+        .training-complete .progress-wrapper {
+            border-left-color: var(--success-green);
+            background: #d4edda;
+        }
+
+        .training-complete .progress-fill {
+            background: linear-gradient(45deg, var(--success-green), #28a745);
+        }
+
+        .training-active .progress-wrapper {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+
+        /* Training Options Styles */
+        .training-control-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+
+        .training-options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .training-options .btn {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .training-options .btn-primary {
+            background: linear-gradient(45deg, var(--primary-blue), #007bff);
+            color: white;
+        }
+
+        .training-options .btn-primary:hover {
+            background: linear-gradient(45deg, #0056b3, #0062cc);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,123,255,0.3);
+        }
+
+        .training-options .btn-secondary {
+            background: linear-gradient(45deg, #6c757d, #5a6268);
+            color: white;
+        }
+
+        .training-options .btn-secondary:hover {
+            background: linear-gradient(45deg, #5a6268, #495057);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(108,117,125,0.3);
+        }
+
+        .training-options .btn-warning {
+            background: linear-gradient(45deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .training-options .btn-warning:hover {
+            background: linear-gradient(45deg, #e0a800, #d39e00);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255,193,7,0.3);
+        }
+
+        .training-desc {
+            font-size: 14px;
+            color: #666;
+            margin: 0;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -516,7 +669,7 @@
                 
                 <div class="control-panel">
                     <button class="button primary" onclick="trainMLModels()">🚀 Start Basic Training (14 days)</button>
-                    <button class="button primary" onclick="trainExtendedMLModelsWithProgress()">🚀 Start Extended Training (1 Year)</button>
+                    <button class="button primary" onclick="showTrainingOptions()">🚀 Extended Training Options (1 Year)</button>
                     <button class="button secondary" onclick="getTrainingStatus()">📊 Training Status</button>
                     <button class="button secondary" onclick="getMLPredictions()">🔮 Basic Predictions</button>
                     <button class="button secondary" onclick="getExtendedPredictions()">🔮 Extended Predictions</button>
@@ -524,6 +677,21 @@
                 
                 <div id="ml-content">
                     <div class="loading">Click buttons above to interact with ML training system</div>
+                </div>
+                
+                <!-- Progress Container for Extended Training -->
+                <div id="progressContainer" style="display: none; margin-top: 20px;">
+                    <div class="progress-wrapper">
+                        <h3>🚀 Extended Training Progress</h3>
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="progressStatus">Starting training...</div>
+                        <div id="progressPercent" style="font-weight: bold; margin: 10px 0;">0%</div>
+                        <div id="progressDetails" class="progress-details"></div>
+                        <div id="progressETA" class="progress-details"></div>
+                        <div id="progressLog" class="training-log"></div>
+                    </div>
                 </div>
                 
                 <div class="info-box">
@@ -760,6 +928,36 @@
                         $${data.bonds_level.toFixed(2)}
                     </div>
                     <small>Safe haven alternative to gold</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">🏛️ Fed Funds Rate</div>
+                    <div class="indicator-value ${data.fed_funds_rate > 5 ? 'negative' : data.fed_funds_rate < 2 ? 'positive' : 'neutral'}">
+                        ${data.fed_funds_rate.toFixed(2)}%
+                    </div>
+                    <div class="change-indicator ${data.fed_funds_change_pct >= 0 ? 'positive' : 'negative'}">
+                        ${data.fed_funds_change_pct >= 0 ? '↗' : '↘'} ${Math.abs(data.fed_funds_change_pct).toFixed(2)}%
+                    </div>
+                    <small>Higher rates pressure gold prices</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📊 Inflation Expectation</div>
+                    <div class="indicator-value ${data.inflation_expectation > 3 ? 'positive' : data.inflation_expectation < 1.5 ? 'negative' : 'neutral'}">
+                        ${data.inflation_expectation.toFixed(2)}%
+                    </div>
+                    <div class="change-indicator ${data.tips_performance >= 0 ? 'positive' : 'negative'}">
+                        TIPS: ${data.tips_performance >= 0 ? '↗' : '↘'} ${Math.abs(data.tips_performance).toFixed(2)}%
+                    </div>
+                    <small>Inflation trends: ${data.inflation_signal}</small>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-title">📈 Yield Curve</div>
+                    <div class="indicator-value ${data.yield_curve_spread < 0.2 ? 'negative' : data.yield_curve_spread > 1.5 ? 'positive' : 'neutral'}">
+                        ${data.yield_curve_spread.toFixed(2)}%
+                    </div>
+                    <small>${data.yield_curve_spread < 0.5 ? 'Flattening curve - potential recession signal' : 'Normal yield curve'}</small>
                 </div>
             `;
             
@@ -1374,6 +1572,110 @@
         }
 
         // Extended ML Training Functions
+        async function showTrainingOptions() {
+            const content = document.getElementById('ml-content');
+            content.innerHTML = '<div class="loading">🔍 Checking cache status...</div>';
+            
+            try {
+                // Check cache status first
+                const cacheResponse = await fetch(`${API_BASE}/cache-status`);
+                const cacheData = await cacheResponse.json();
+                
+                let cacheInfo = '';
+                let trainingOptions = '';
+                
+                if (cacheData.status === 'success') {
+                    if (cacheData.cache_valid) {
+                        cacheInfo = `
+                            <div class="info-box success">
+                                <h4>✅ Trained Models Found</h4>
+                                <p>${cacheData.cache_message}</p>
+                                ${cacheData.metadata.last_training_date ? 
+                                    `<p><strong>Last trained:</strong> ${new Date(cacheData.metadata.last_training_date).toLocaleString()}</p>` : ''}
+                                ${cacheData.metadata.model_performance ? 
+                                    `<p><strong>Models:</strong> ${Object.keys(cacheData.metadata.model_performance).length} trained horizons</p>` : ''}
+                            </div>
+                        `;
+                        
+                        trainingOptions = `
+                            <div class="training-options">
+                                <button onclick="trainExtendedMLModelsWithProgress(false)" class="btn btn-primary">
+                                    🚀 Smart Training (Use Cache)
+                                </button>
+                                <p class="training-desc">Intelligent training that uses cached models and only updates when necessary.</p>
+                                
+                                <button onclick="trainExtendedMLModelsWithProgress(true)" class="btn btn-secondary">
+                                    🔄 Force Full Retrain
+                                </button>
+                                <p class="training-desc">Force complete retraining of all models from scratch (15-20 minutes).</p>
+                                
+                                <button onclick="clearCache()" class="btn btn-warning">
+                                    🗑️ Clear Cache
+                                </button>
+                                <p class="training-desc">Remove all cached models and data (next training will be full).</p>
+                            </div>
+                        `;
+                    } else {
+                        cacheInfo = `
+                            <div class="info-box warning">
+                                <h4>⚠️ No Valid Cache Found</h4>
+                                <p>${cacheData.cache_message}</p>
+                                <p>Full training required (15-20 minutes).</p>
+                            </div>
+                        `;
+                        
+                        trainingOptions = `
+                            <div class="training-options">
+                                <button onclick="trainExtendedMLModelsWithProgress(false)" class="btn btn-primary">
+                                    🚀 Start Full Training
+                                </button>
+                                <p class="training-desc">Train 14 models with 300+ features for predictions from 1 day to 1 year.</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                content.innerHTML = `
+                    <div class="training-control-panel">
+                        <h3>🤖 Extended ML Training Control Panel</h3>
+                        ${cacheInfo}
+                        ${trainingOptions}
+                    </div>
+                `;
+                
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="info-box error">
+                        <h3>❌ Cache Check Failed</h3>
+                        <p>Error: ${error.message}</p>
+                        <button onclick="trainExtendedMLModelsWithProgress(false)" class="btn btn-primary">
+                            🚀 Start Training Anyway
+                        </button>
+                    </div>
+                `;
+            }
+        }
+        
+        async function clearCache() {
+            if (!confirm('Are you sure you want to clear the model cache? This will require full retraining next time.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/clear-cache`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showSuccess(`Cache cleared: ${data.files_removed.join(', ')}`);
+                    showTrainingOptions(); // Refresh the panel
+                } else {
+                    showError('Failed to clear cache: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                showError('Cache clear failed: ' + error.message);
+            }
+        }
+
         async function trainExtendedMLModels() {
             const content = document.getElementById('ml-content');
             content.innerHTML = '<div class="loading">🚀 Starting Extended ML training with 1-year predictions (300+ features)...</div>';
@@ -1425,18 +1727,61 @@
         }
 
         // Progress tracking version of extended training
-        async function trainExtendedMLModelsWithProgress() {
+        async function trainExtendedMLModelsWithProgress(forceRetrain = false) {
             // Show progress container
             document.getElementById('progressContainer').style.display = 'block';
             
-            // Start training
+            // First check if training is already in progress or completed
             try {
+                const progressResponse = await fetch(`${API_BASE}/training-progress`);
+                const progressData = await progressResponse.json();
+                
+                if (progressData.status === 'success' && progressData.progress) {
+                    const progress = progressData.progress;
+                    
+                    if (progress.status === 'completed' && !forceRetrain) {
+                        // Training already completed, show completion
+                        updateProgressDisplay(progressData);
+                        showSuccess('Extended training already completed! All models available.');
+                        return;
+                    } else if (progress.status === 'running') {
+                        // Training in progress, start polling
+                        updateProgressDisplay(progressData);
+                        startProgressPolling();
+                        return;
+                    } else if (progress.status === 'failed') {
+                        // Previous training failed
+                        updateProgressDisplay(progressData);
+                        showError('Previous training failed. Starting new training session...');
+                    }
+                }
+            } catch (error) {
+                console.log('No previous training status found, starting new training...');
+            }
+            
+            // Start new training
+            try {
+                const requestBody = new URLSearchParams({
+                    force_retrain: forceRetrain,
+                    period: '3y'
+                });
+                
                 const response = await fetch(`${API_BASE}/start-extended-training-async`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: requestBody
                 });
                 const data = await response.json();
                 
                 if (data.status === 'started') {
+                    // Show cache status message
+                    const cacheMessage = forceRetrain ? 
+                        'Starting full retraining (ignoring cache)...' : 
+                        'Starting smart training (using cache when possible)...';
+                    showInfo(cacheMessage);
+                    
                     // Start polling for progress
                     startProgressPolling();
                 } else if (data.status === 'already_running') {
@@ -1448,6 +1793,58 @@
             } catch (error) {
                 showError('Training request failed: ' + error.message);
                 document.getElementById('progressContainer').style.display = 'none';
+            }
+        }
+
+        // Helper function to update progress display
+        function updateProgressDisplay(data) {
+            if (data.status === 'success' && data.progress) {
+                const progress = data.progress;
+                
+                // Update progress bar
+                document.getElementById('progressFill').style.width = `${progress.progress_percent}%`;
+                document.getElementById('progressPercent').textContent = `${progress.progress_percent.toFixed(1)}%`;
+                document.getElementById('progressStatus').textContent = progress.current_step;
+                
+                // Update details
+                const details = [
+                    `Models: ${progress.models_completed}/${progress.total_models}`,
+                    `Current: ${progress.current_model || 'N/A'}`,
+                    progress.details || ''
+                ].filter(d => d).join(' | ');
+                
+                document.getElementById('progressDetails').textContent = details;
+                
+                // Update ETA
+                if (progress.estimated_time_remaining > 0) {
+                    const eta = Math.ceil(progress.estimated_time_remaining / 60);
+                    document.getElementById('progressETA').textContent = `Estimated time remaining: ${eta} minutes`;
+                } else if (progress.status === 'completed') {
+                    document.getElementById('progressETA').textContent = '✅ Training completed successfully!';
+                } else {
+                    document.getElementById('progressETA').textContent = 'Calculating time remaining...';
+                }
+                
+                // Update log
+                if (progress.detailed_log) {
+                    const logHtml = progress.detailed_log
+                        .slice(-10) // Show last 10 entries
+                        .map(entry => `[${new Date(entry.timestamp).toLocaleTimeString()}] ${entry.step} - ${entry.details}`)
+                        .join('\n');
+                    document.getElementById('progressLog').textContent = logHtml;
+                }
+                
+                // Add completion styling
+                const container = document.getElementById('progressContainer');
+                if (progress.status === 'completed') {
+                    container.classList.add('training-complete');
+                    container.classList.remove('training-active');
+                } else if (progress.status === 'running') {
+                    container.classList.add('training-active');
+                    container.classList.remove('training-complete');
+                } else {
+                    container.classList.remove('training-active', 'training-complete');
+                }
             }
         }
 
@@ -1473,7 +1870,7 @@
                     // Helper function to get change info
                     const getChangeInfo = (predObj) => {
                         if (typeof predObj === 'object') {
-                            const change = predObj.predicted_change_pct || 0;
+                            const change = predObj.percentage_change || 0;
                             const changeColor = change >= 0 ? '#2ecc71' : '#e74c3c';
                             const changeSymbol = change >= 0 ? '↗' : '↘';
                             return `<small style="color: ${changeColor}">${changeSymbol} ${change.toFixed(2)}%</small>`;
@@ -1488,9 +1885,11 @@
                                 ${Object.entries(predictions).map(([horizon, predictionObj]) => {
                                     const price = formatPrice(predictionObj);
                                     const changeInfo = getChangeInfo(predictionObj);
-                                    const confidence = predictionObj.confidence ? (predictionObj.confidence * 100).toFixed(1) + '%' : 'N/A';
-                                    const modelType = predictionObj.model_type || 'Unknown';
-                                    const horizonReadable = predictionObj.horizon_readable || horizon;
+                                    const confidence = predictionObj.confidence || 'Unknown';
+                                    const modelFile = predictionObj.model_file || '';
+                                    // Extract model type from file path (e.g. "gold_model_1d.pkl" -> "1d Model")
+                                    const modelType = modelFile ? modelFile.split('/').pop().replace('gold_model_', '').replace('.pkl', '').toUpperCase() + ' Model' : 'ML Model';
+                                    const horizonReadable = predictionObj.horizon || horizon;
                                     
                                     return `
                                         <div class="correlation-item">
@@ -1570,47 +1969,10 @@
             fetch(`${API_BASE}/training-progress`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status === 'success') {
+                    updateProgressDisplay(data);
+                    
+                    if (data.status === 'success' && data.progress) {
                         const progress = data.progress;
-                        
-                        // Update progress bar
-                        document.getElementById('progressFill').style.width = `${progress.progress_percent}%`;
-                        document.getElementById('progressPercent').textContent = `${progress.progress_percent.toFixed(1)}%`;
-                        document.getElementById('progressStatus').textContent = progress.current_step;
-                        
-                        // Update details
-                        const details = [
-                            `Models: ${progress.models_completed}/${progress.total_models}`,
-                            `Current: ${progress.current_model || 'N/A'}`,
-                            progress.details || ''
-                        ].filter(d => d).join(' | ');
-                        
-                        document.getElementById('progressDetails').textContent = details;
-                        
-                        // Update ETA
-                        if (progress.estimated_time_remaining > 0) {
-                            const eta = Math.ceil(progress.estimated_time_remaining / 60);
-                            document.getElementById('progressETA').textContent = `Estimated time remaining: ${eta} minutes`;
-                        } else {
-                            document.getElementById('progressETA').textContent = 'Calculating time remaining...';
-                        }
-                        
-                        // Update log
-                        if (progress.detailed_log) {
-                            const logHtml = progress.detailed_log
-                                .slice(-10) // Show last 10 entries
-                                .map(entry => `[${new Date(entry.timestamp).toLocaleTimeString()}] ${entry.step} - ${entry.details}`)
-                                .join('\n');
-                            document.getElementById('progressLog').textContent = logHtml;
-                        }
-                        
-                        // Add pulsing effect during training
-                        const container = document.getElementById('progressContainer');
-                        if (progress.status === 'running') {
-                            container.classList.add('training-active');
-                        } else {
-                            container.classList.remove('training-active');
-                        }
                         
                         // Stop polling when complete
                         if (progress.status === 'completed' || progress.status === 'failed') {
@@ -1618,8 +1980,8 @@
                             progressInterval = null;
                             
                             if (progress.status === 'completed') {
-                                showSuccess('Extended training completed successfully!');
-                                // Refresh predictions
+                                showSuccess('Extended training completed successfully! All 14 models trained.');
+                                // Refresh predictions after 2 seconds
                                 setTimeout(getExtendedPredictions, 2000);
                             } else {
                                 showError('Training failed. Check the log for details.');

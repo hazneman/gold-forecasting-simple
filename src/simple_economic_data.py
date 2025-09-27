@@ -23,7 +23,15 @@ class SimpleEconomicDataCollector:
             'bitcoin': 'BTC-USD',
             'treasury_10y': '^TNX',
             'bonds': 'TLT',
-            'copper': 'HG=F'
+            'copper': 'HG=F',
+            'fed_funds': '^IRX',  # 3-Month Treasury as proxy for Fed funds rate
+            'tips_5y': '^FVX'     # 5-Year Treasury for inflation expectations
+        }
+        # Inflation data approximation using TIPS spread
+        self.inflation_proxy_symbols = {
+            'tips_10y': 'SCHP',  # TIPS ETF
+            'treasury_5y': '^FVX',
+            'treasury_2y': '^TNX'  # Will use for yield curve analysis
         }
     
     def collect_all_indicators(self, period='1mo') -> Dict[str, Any]:
@@ -52,7 +60,65 @@ class SimpleEconomicDataCollector:
                 print(f"Error fetching {name}: {e}")
                 data[name] = {'price': 0.0, 'change_pct': 0.0, 'symbol': symbol}
         
+        # Add inflation expectations calculation
+        data.update(self._calculate_inflation_metrics())
+        
         return self._format_indicators(data)
+    
+    def _calculate_inflation_metrics(self) -> Dict[str, Any]:
+        """Calculate inflation expectations and related metrics"""
+        inflation_data = {}
+        
+        try:
+            # Get 5Y and 10Y treasury yields for inflation expectations
+            treasury_5y = yf.Ticker('^FVX').history(period='5d')
+            treasury_10y = yf.Ticker('^TNX').history(period='5d')
+            tips_etf = yf.Ticker('SCHP').history(period='5d')  # TIPS ETF as inflation proxy
+            
+            if not treasury_5y.empty and not treasury_10y.empty:
+                # Current yields
+                yield_5y = treasury_5y['Close'].iloc[-1]
+                yield_10y = treasury_10y['Close'].iloc[-1]
+                
+                # Estimate inflation expectations (simplified)
+                # Real inflation expectations are complex, this is an approximation
+                inflation_expectation = yield_10y - 2.0  # Assume 2% real rate target
+                inflation_expectation = max(0, min(inflation_expectation, 10))  # Cap between 0-10%
+                
+                # TIPS performance as inflation indicator
+                tips_performance = 0
+                if not tips_etf.empty and len(tips_etf) > 1:
+                    tips_current = tips_etf['Close'].iloc[-1]
+                    tips_prev = tips_etf['Close'].iloc[-2]
+                    tips_performance = ((tips_current - tips_prev) / tips_prev) * 100
+                
+                inflation_data = {
+                    'inflation_expectation': {
+                        'price': float(inflation_expectation),
+                        'change_pct': 0.0,  # Would need historical data for change
+                        'symbol': 'CALCULATED'
+                    },
+                    'tips_performance': {
+                        'price': float(tips_performance),
+                        'change_pct': float(tips_performance),
+                        'symbol': 'SCHP'
+                    },
+                    'yield_curve_5_10': {
+                        'price': float(yield_10y - yield_5y),
+                        'change_pct': 0.0,
+                        'symbol': 'CALCULATED'
+                    }
+                }
+                
+        except Exception as e:
+            print(f"Error calculating inflation metrics: {e}")
+            inflation_data = {
+                'inflation_expectation': {'price': 2.5, 'change_pct': 0.0, 'symbol': 'ESTIMATED'},
+                'tips_performance': {'price': 0.0, 'change_pct': 0.0, 'symbol': 'UNAVAILABLE'},
+                'yield_curve_5_10': {'price': 0.5, 'change_pct': 0.0, 'symbol': 'ESTIMATED'}
+            }
+        
+        return inflation_data
     
     def _format_indicators(self, data: Dict) -> Dict[str, Any]:
         """Format indicators for API response"""
@@ -65,6 +131,12 @@ class SimpleEconomicDataCollector:
             stress_level = "Moderate"
         else:
             stress_level = "Low"
+        
+        # Get Fed funds rate and inflation data
+        fed_funds_rate = data.get('fed_funds', {}).get('price', 0)
+        inflation_expectation = data.get('inflation_expectation', {}).get('price', 2.5)
+        tips_performance = data.get('tips_performance', {}).get('price', 0)
+        yield_curve_spread = data.get('yield_curve_5_10', {}).get('price', 0.5)
         
         return {
             'gold_price': data.get('gold', {}).get('price', 0),
@@ -80,6 +152,13 @@ class SimpleEconomicDataCollector:
             'bitcoin_price': data.get('bitcoin', {}).get('price', 0),
             'bonds_level': data.get('bonds', {}).get('price', 0),
             'copper_price': data.get('copper', {}).get('price', 0),
+            # NEW: Fed funds rate and inflation data
+            'fed_funds_rate': fed_funds_rate,
+            'fed_funds_change_pct': data.get('fed_funds', {}).get('change_pct', 0),
+            'inflation_expectation': inflation_expectation,
+            'tips_performance': tips_performance,
+            'yield_curve_spread': yield_curve_spread,
+            'inflation_signal': 'Rising' if tips_performance > 0.1 else 'Falling' if tips_performance < -0.1 else 'Stable',
             'timestamp': datetime.now().isoformat()
         }
 

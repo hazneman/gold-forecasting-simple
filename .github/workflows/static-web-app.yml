@@ -1,0 +1,74 @@
+name: Deploy Static Web App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [ main ]
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          lfs: false
+          
+      - name: Prepare deployment files
+        run: |
+          # Create a clean build directory
+          mkdir -p build
+          
+          # Copy dashboard HTML
+          cp economic_dashboard.html build/index.html
+          
+          # Update API endpoints to use Azure Functions
+          sed -i 's|http://localhost:8000/|https://gold-price-forecasting-app.azurewebsites.net/|g' build/index.html
+          
+          # Create staticwebapp.config.json
+          cat > build/staticwebapp.config.json << 'EOF'
+          {
+            "routes": [
+              {
+                "route": "/api/*",
+                "allowedRoles": ["anonymous"]
+              }
+            ],
+            "navigationFallback": {
+              "rewrite": "/index.html",
+              "exclude": ["/api/*", "/*.{css,scss,js,png,gif,ico,jpg,svg}"]
+            },
+            "mimeTypes": {
+              ".html": "text/html",
+              ".js": "text/javascript",
+              ".css": "text/css"
+            }
+          }
+          EOF
+
+      - name: Build And Deploy
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "build"
+          api_location: ""
+          output_location: ""
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+      - name: Close Pull Request
+        id: closepullrequest
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: "close"

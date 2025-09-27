@@ -29,7 +29,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.data_collection import GoldDataCollector
 from src.feature_engineering import FeatureEngineer
-from src.models import create_model, ModelEnsemble
+# from src.models import create_model, ModelEnsemble  # Temporarily disabled due to TensorFlow import issue
 from src.visualization import GoldPriceVisualizer
 from src.risk_management import RiskManager
 from src.backtesting import Backtester, BacktestConfig, MovingAverageCrossoverStrategy
@@ -120,12 +120,13 @@ async def load_model(model_type: str = "ensemble"):
             else:
                 # Create and train a new model (simplified for demo)
                 logger.info(f"Creating new {model_type} model")
-                cached_model = create_model("random_forest", n_estimators=100)
+                # Temporarily disabled due to import issues
+                return None
                 
         except Exception as e:
             logger.error(f"Error loading model: {e}")
-            # Fallback to simple model
-            cached_model = create_model("linear")
+            # Fallback to simple model - temporarily disabled
+            return None
     
     return cached_model
 
@@ -1028,8 +1029,11 @@ async def train_model(background_tasks: BackgroundTasks, model_type: str = "rand
             X = X.iloc[:-1]  # Remove last row to match y
             
             # Create and train model
-            model = create_model(model_type)
-            model.fit(X, y)
+            # Temporarily disable model creation due to import issues
+            return {"error": "Forecast temporarily disabled due to model import issues"}
+            
+            # model = create_model(model_type)
+            # model.fit(X, y)
             
             # Save model
             model_dir = Path("data/models")
@@ -1129,9 +1133,30 @@ async def start_extended_training():
         logger.error(f"Extended training error: {e}")
         raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
 
+@app.post("/train_extended_models_with_progress")
+async def train_extended_models_with_progress_endpoint(
+    force_retrain: bool = False,
+    period: str = "3y"
+):
+    """Train extended models with progress tracking and intelligent caching (synchronous)"""
+    try:
+        result = enhanced_trainer.train_extended_models_with_progress(
+            period=period,
+            force_retrain=force_retrain
+        )
+        return result
+        
+    except Exception as e:
+        logger.error(f"Extended training error: {e}")
+        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
+
 @app.post("/start-extended-training-async")
-async def start_extended_training_async(background_tasks: BackgroundTasks):
-    """Start extended training in background with progress tracking"""
+async def start_extended_training_async(
+    background_tasks: BackgroundTasks, 
+    force_retrain: bool = False,
+    period: str = "3y"
+):
+    """Start extended training in background with progress tracking and intelligent caching"""
     try:
         if enhanced_trainer.is_training:
             return {
@@ -1140,19 +1165,100 @@ async def start_extended_training_async(background_tasks: BackgroundTasks):
                 "progress": enhanced_trainer.get_training_progress()
             }
         
-        # Start training in background
-        background_tasks.add_task(enhanced_trainer.train_extended_models_with_progress)
+        # Start training in background with caching options
+        background_tasks.add_task(
+            enhanced_trainer.train_extended_models_with_progress, 
+            period=period,
+            force_retrain=force_retrain
+        )
+        
+        cache_status = "disabled" if force_retrain else "enabled"
+        estimated_time = "15-20 minutes" if force_retrain else "5-20 minutes (cached models load instantly)"
         
         return {
             "status": "started",
-            "message": "Extended training started in background",
-            "estimated_duration": "15-20 minutes",
-            "progress_endpoint": "/training-progress"
+            "message": f"Extended training started with intelligent caching {cache_status}",
+            "force_retrain": force_retrain,
+            "period": period,
+            "estimated_duration": estimated_time,
+            "progress_endpoint": "/training-progress",
+            "cache_info": "System will check for existing models and only retrain if necessary"
         }
         
     except Exception as e:
         logger.error(f"Failed to start async training: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}")
+
+@app.get("/cache-status")
+async def get_cache_status():
+    """Get cache status and model information"""
+    try:
+        model_status = enhanced_trainer.check_models_exist()
+        cache_metadata = enhanced_trainer.load_cache_metadata()
+        
+        # Calculate overall cache status
+        fresh_models = [h for h, status in model_status.items() if status['fresh']]
+        total_models = len(model_status)
+        cache_valid = len(fresh_models) == total_models
+        
+        status_message = f"{len(fresh_models)}/{total_models} models are fresh"
+        
+        return {
+            "status": "success",
+            "cache_valid": cache_valid,
+            "cache_message": status_message,
+            "model_status": model_status,
+            "metadata": cache_metadata,
+            "fresh_models": fresh_models,
+            "total_models": total_models
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cache status: {str(e)}")
+
+@app.get("/cache_status")
+async def get_cache_status_alt():
+    """Get cache status and model information (alternative endpoint)"""
+    return await get_cache_status()
+
+@app.post("/clear-cache")
+async def clear_cache():
+    """Clear model and data cache"""
+    try:
+        files_removed = []
+        
+        # Remove cache metadata
+        if enhanced_trainer.cache_metadata_file.exists():
+            enhanced_trainer.cache_metadata_file.unlink()
+            files_removed.append("cache_metadata.json")
+            
+        # Remove data cache
+        if enhanced_trainer.data_cache_file.exists():
+            enhanced_trainer.data_cache_file.unlink()
+            files_removed.append("training_data_cache.pkl")
+            
+        # Remove model files
+        model_files_removed = 0
+        for horizon_name in enhanced_trainer.horizon_names.values():
+            model_file = enhanced_trainer.model_dir / f"gold_model_{horizon_name}.pkl"
+            if model_file.exists():
+                model_file.unlink()
+                model_files_removed += 1
+        
+        if model_files_removed > 0:
+            files_removed.append(f"{model_files_removed} model files")
+            
+        return {
+            "status": "success",
+            "message": "Cache cleared successfully",
+            "files_removed": files_removed,
+            "next_training": "Next training will be full training from scratch"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
 
 @app.get("/training-progress")
 async def get_training_progress():
@@ -1194,11 +1300,14 @@ async def get_extended_predictions():
         return {
             "status": "success",
             "predictions": predictions["predictions"],
-            "current_analysis": predictions["current_analysis"],
-            "notes": predictions["notes"],
+            "current_price": predictions.get("current_price", 0),
+            "total_horizons": predictions.get("total_horizons", 0),
+            "successful_predictions": predictions.get("successful_predictions", 0),
             "horizons_available": list(predictions["predictions"].keys()),
             "total_models": len(predictions["predictions"]),
-            "prediction_range": "1 day to 1 year"
+            "prediction_range": "1 day to 1 year",
+            "timestamp": predictions.get("timestamp", ""),
+            "data_freshness": predictions.get("data_freshness", "unknown")
         }
         
     except Exception as e:
