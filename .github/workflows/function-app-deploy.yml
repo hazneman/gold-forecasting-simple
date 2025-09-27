@@ -27,11 +27,11 @@ jobs:
         python -m venv venv
         source venv/bin/activate
 
-    - name: 'Install dependencies'
+    - name: 'Install dependencies (azure-requirements)'
       run: |
         source venv/bin/activate
         python -m pip install --upgrade pip
-        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+        pip install -r azure-requirements.txt --target=".python_packages/lib/site-packages"
 
     - name: 'Clean up for deployment'
       run: |

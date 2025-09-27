@@ -1,8 +1,6 @@
-name: Deploy Gold Price Forecasting to Azure
+name: Deploy Gold Price Forecasting to Azure (manual)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
