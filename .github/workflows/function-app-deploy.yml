@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_NAME: 'gold-forecasting-api'
+  AZURE_FUNCTIONAPP_NAME: 'rg-gold-forecasting'
   AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
   PYTHON_VERSION: '3.12'
 
@@ -60,6 +60,6 @@ jobs:
     - name: 'Deployment Success'
       run: |
         echo "🎉 Gold Price Forecasting API deployed successfully!"
-        echo "🔗 Function App URL: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net"
-        echo "📊 Dashboard: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/dashboard"
-        echo "🔮 Predictions: https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/api/extended-predictions"
+        echo "🔗 Function App URL: https://rg-gold-forecasting.azurewebsites.net"
+        echo "📊 Dashboard: https://rg-gold-forecasting.azurewebsites.net/dashboard"
+        echo "🔮 Predictions: https://rg-gold-forecasting.azurewebsites.net/api/extended-predictions"
