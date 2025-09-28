@@ -1,0 +1,57 @@
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: 'gold-forecasting-simple'
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@v4
+
+    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 'Create and start virtual environment'
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+
+    - name: 'Install dependencies'
+      run: |
+        source venv/bin/activate
+        pip install -r requirements-webapp.txt
+
+    - name: 'Clean up for deployment'
+      run: |
+        # Remove development files
+        rm -rf .pytest_cache __pycache__ .git .venv venv data/models data/processed
+        find . -name "*.pyc" -delete
+        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+    - name: 'Deploy to Azure Web App'
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        slot-name: 'Production'
+        package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        startup-command: 'gunicorn --bind 0.0.0.0:$PORT simple_app:app'
+
+    - name: 'Deployment Success'
+      run: |
+        echo "🎉 Simple Flask Web App deployed successfully!"
+        echo "🔗 Web App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        echo "📊 Health Check: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
+        echo "� Forecast: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/forecast"
