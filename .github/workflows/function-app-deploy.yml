@@ -27,11 +27,11 @@ jobs:
         python -m venv venv
         source venv/bin/activate
 
-    - name: 'Install dependencies (azure-requirements)'
+    - name: 'Install dependencies (minimal Azure)'
       run: |
         source venv/bin/activate
         python -m pip install --upgrade pip
-        pip install -r azure-requirements.txt --target=".python_packages/lib/site-packages"
+        pip install -r requirements-azure.txt --target=".python_packages/lib/site-packages"
 
     - name: 'Clean up for deployment'
       run: |
@@ -41,11 +41,13 @@ jobs:
         rm -rf .git
         find . -name "*.pyc" -delete
         find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        # Keep data structure but remove large model files (will be recreated)
-        mkdir -p data/models
-        mkdir -p data/processed
-        # Remove any existing models to save space
-        rm -f data/models/*.pkl 2>/dev/null || true
+        # Remove large/unnecessary files for deployment
+        rm -rf data/models
+        rm -rf data/processed
+        rm -rf .venv
+        rm -rf venv
+        # Use simple function app for reliability
+        cp simple_function_app.py function_app.py
 
     - name: 'Deploy to Azure Functions'
       uses: Azure/functions-action@v1
