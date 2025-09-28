@@ -1,8 +1,6 @@
-name: Deploy Azure Function App
+name: Deploy Azure Function App (disabled)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
@@ -27,27 +25,23 @@ jobs:
         python -m venv venv
         source venv/bin/activate
 
-    - name: 'Install dependencies (minimal Azure)'
+    - name: 'Install minimal dependencies'
       run: |
         source venv/bin/activate
         python -m pip install --upgrade pip
-        pip install -r requirements-azure.txt --target=".python_packages/lib/site-packages"
+                pip install -r requirements-minimal.txt --target=".python_packages/lib/site-packages"
 
     - name: 'Clean up for deployment'
       run: |
-        # Remove development files that aren't needed
-        rm -rf .pytest_cache
-        rm -rf __pycache__
-        rm -rf .git
+        # Remove development files
+        rm -rf .pytest_cache __pycache__ .git .venv venv data/models data/processed
         find . -name "*.pyc" -delete
         find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        # Remove large/unnecessary files for deployment
-        rm -rf data/models
-        rm -rf data/processed
-        rm -rf .venv
-        rm -rf venv
-        # Use simple function app for reliability
-        cp simple_function_app.py function_app.py
+        # Use the ultra-minimal function app
+        cp minimal_function_app.py function_app.py
+        # Verify the function app is ready
+        echo "Using minimal function_app.py for deployment"
+        ls -la function_app.py
 
     - name: 'Deploy to Azure Functions'
       uses: Azure/functions-action@v1
