@@ -60,6 +60,10 @@ jobs:
     - name: 'Deployment Success'
       run: |
         echo "🎉 Gold Price Forecasting API deployed successfully!"
-        echo "🔗 Function App URL: https://rg-gold-forecasting.azurewebsites.net"
-        echo "📊 Dashboard: https://rg-gold-forecasting.azurewebsites.net/dashboard"
-        echo "🔮 Predictions: https://rg-gold-forecasting.azurewebsites.net/api/extended-predictions"
+        echo "⚠️  Note: Azure generates a unique URL with security suffix"
+        echo "🔗 Check Azure Portal for the exact Function App URL"
+        echo "📊 Dashboard endpoint: /dashboard"
+        echo "🔮 Predictions endpoint: /api/extended-predictions"
+        echo "💊 Health check endpoint: /api/health"
+        echo ""
+        echo "ℹ️  Function Apps may take 1-5 minutes to start after first deployment"
