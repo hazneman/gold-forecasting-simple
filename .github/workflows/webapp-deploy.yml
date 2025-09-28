@@ -40,14 +40,13 @@ jobs:
         find . -name "*.pyc" -delete
         find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-    - name: 'Deploy to Azure Web App'
+        - name: 'Deploy to Azure Web App'
       uses: azure/webapps-deploy@v3
       with:
-        app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        slot-name: 'Production'
+        app-name: 'gold-forecasting-simple'
+        slot-name: 'production'
         package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        startup-command: 'gunicorn --bind 0.0.0.0:$PORT simple_app:app'
 
     - name: 'Deployment Success'
       run: |
